@@ -1,0 +1,25 @@
+name: image-host
+services:
+  sftp:
+    image: atmoz/sftp:alpine
+    container_name: imghost-sftp
+    volumes:
+      - ./data:/home/${SFTP_USERNAME}/data
+      - ./sftp.d:/etc/sftp.d
+      - ./ssh/sshd_config:/etc/ssh/sshd_config
+      - ./ssh/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key
+      - ./ssh/ssh_host_ed25519_key:/etc/ssh/ssh_host_ed25519_key
+    ports:
+      - "2222:22/tcp"
+    command: ${SFTP_USERNAME}:${SFTP_PASSWORD}:e:${USER_UID}:${USER_GID}
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: imghost-nginx
+    ports:
+      - "2080:80/tcp"
+    volumes:
+      - ./data:/data
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    restart: unless-stopped
