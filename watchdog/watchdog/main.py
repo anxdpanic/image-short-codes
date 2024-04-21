@@ -28,18 +28,19 @@ REQUIRED_SETTINGS = ['host', 'port', 'username', 'password', 'local', 'remote']
 
 
 def load_settings(filename):
-    if os.path.isfile(filename):
-        with open(filename, 'r') as settings_file:
-            payload = json.load(settings_file)
+    if not os.path.isfile(filename):
+        logger.error(f'Settings file does not exist. "{filename}"')
+        return None
 
-        for setting in REQUIRED_SETTINGS:
-            if setting not in payload.keys():
-                logger.error(f'Required setting "{setting}" missing in {filename}')
-                return None
+    with open(filename, 'r') as settings_file:
+        payload = json.load(settings_file)
 
-        return payload
+    for setting in REQUIRED_SETTINGS:
+        if setting not in payload.keys():
+            logger.error(f'Required setting "{setting}" missing in {filename}')
+            return None
 
-    return None
+    return payload
 
 
 def generate_shortcode():
