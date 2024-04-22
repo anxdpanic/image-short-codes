@@ -55,11 +55,13 @@ async def on_fetch(request, env):
         data = await request.text()
         data = json.loads(data)
 
-        shortcode = data.get('exists')
-        if shortcode:
-            result = await env.image_db.prepare(statements.exists).bind(shortcode).raw()
-            if result[0][0] == 1:
-                return RESPONSES.status_200()
+        image_filename = data.get('shortcode')
+        if image_filename and not data.get('image'):
+            image_filename = img_url + image_filename
+            # return shortcode for image if exists
+            result = await env.image_db.prepare(statements.select_url).bind(image_filename).first()
+            if hasattr(result, 'shortcode') and result.shortcode:
+                return RESPONSES.status_200(json.dumps({'shortcode': result.shortcode}))
 
             return RESPONSES.status_404()
 
@@ -117,8 +119,7 @@ async def on_fetch(request, env):
         result = await (env.image_db.prepare(statements.delete)
                         .bind(request_path).run())
         if result.success and result.meta.changes > 0:
-            response = Response.new('', {'status': 200})
-            return response
+            return RESPONSES.status_200()
 
         return RESPONSES.status_500()
 

@@ -13,9 +13,15 @@ def message_response(title, message):
 
 class Responses:
     @staticmethod
-    def status_200():
-        response = Response.new('', {'status': 200})
-        response.headers.set('Content-Type', 'text/plain')
+    def status_200(json_data=None):
+        body = ''
+        content_type = 'text/plain'
+        if json_data:
+            body = json_data
+            content_type = 'application/json'
+
+        response = Response.new(body, {'status': 200})
+        response.headers.set('Content-Type', content_type)
         return response
 
     @staticmethod
