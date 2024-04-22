@@ -1,4 +1,4 @@
-message_html = '''
+message_template = '''
 <!DOCTYPE html>
 <html lang="en">
 <head>

@@ -1,11 +1,11 @@
 from db.schema import shortcodes_schema
-from static.message import message_html
+from static.message import message_template
 
 from js import Response
 
 
 def message_response(title, message):
-    message_body = message_html
+    message_body = message_template
     for key, value in locals().items():
         message_body = message_body.replace(f'%%{key}%%', value)
 
