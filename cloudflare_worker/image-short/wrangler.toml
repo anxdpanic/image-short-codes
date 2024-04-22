@@ -100,3 +100,13 @@ database_id = ""
 # [[vectorize]]
 # binding = "MY_INDEX"
 # index_name = "my-index"
+
+[env]
+  [env.local]
+    [env.local.vars]
+    CF_WORKER_BASE_URL = "http://127.0.0.1:8787"
+    RAW_IMG_BASE_URL = "https://images.example.com"
+    [[env.local.d1_databases]]
+    binding = "image_db"
+    database_name = "images"
+    database_id = ""
