@@ -70,8 +70,16 @@ class HTTPRequest:
         request.add_header('Referrer', self.worker_url)
         request.add_header('User-Agent', self.user_agent)
 
+        logger.info(f'POST request: {data.decode("utf-8")}')
         with urlopen(request) as response:
             status_code = response.status
+            if status_code == 200 and 'application/json' in response.headers.get('Content-Type'):
+                payload = json.loads(response.read().decode('utf-8'))
+                logger.info(f'POST response: {payload}')
+                return payload
+
+        logger.info(f'POST response: {status_code}')
+        return None
 
     def PUT(self, data):
         data = json.dumps(data)
@@ -83,8 +91,9 @@ class HTTPRequest:
         request.add_header('Referrer', self.worker_url)
         request.add_header('User-Agent', self.user_agent)
 
+        logger.info(f'PUT request: {data}')
         with urlopen(request) as response:
-            status_code = response.status
+            logger.info(f'PUT response: {response.status}')
 
     def DELETE(self, shortcode):
         request = Request(f'{self.worker_url}/{shortcode}', method='DELETE')
@@ -92,8 +101,9 @@ class HTTPRequest:
         request.add_header('Referrer', self.worker_url)
         request.add_header('User-Agent', self.user_agent)
 
+        logger.info(f'DELETE request: {shortcode}')
         with urlopen(request) as response:
-            status_code = response.status
+            logger.info(f'DELETE response: {response.status}')
 
 
 class SFTP:
@@ -212,10 +222,42 @@ class FileMonitorHandler(PatternMatchingEventHandler):
             self.sftp.put(event.src_path, self.connection_details['remote'])
             self.request.POST({'shortcode': shortcode, 'image': Path(event.src_path).name})
         elif event.event_type == 'modified':
+            data = self.request.POST({'shortcode': Path(event.src_path).name})
+            if not data:
+                return
+
+            shortcode = data.get('shortcode')
+            if not shortcode:
+                logger.info(f'No shortcode for {event.src_path}')
+                self.request.POST({'shortcode': shortcode, 'image': Path(event.src_path).name})
+                self.sftp.put(event.src_path, self.connection_details['remote'])
+                return
+
+            self.request.PUT({'shortcode': shortcode, 'image': Path(event.src_path).name})
             self.sftp.put(event.src_path, self.connection_details['remote'])
         elif event.event_type == 'moved':
+            data = self.request.POST({'shortcode': Path(event.src_path).name})
+            if not data:
+                return
+
+            shortcode = data.get('shortcode')
+            if not shortcode:
+                logger.error(f'No shortcode for {event.src_path}')
+                return
+
+            self.request.PUT({'shortcode': shortcode, 'image': Path(event.dest_path).name})
             self.sftp.rename(event.src_path, event.dest_path, self.connection_details['remote'])
         elif event.event_type == 'deleted':
+            data = self.request.POST({'shortcode': Path(event.src_path).name})
+            if not data:
+                return
+
+            shortcode = data.get('shortcode')
+            if not shortcode:
+                logger.error(f'No shortcode for {event.src_path}')
+                return
+
+            self.request.DELETE(shortcode)
             self.sftp.remove(event.src_path, self.connection_details['remote'])
 
     def __del__(self):
