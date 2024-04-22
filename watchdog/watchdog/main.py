@@ -4,9 +4,14 @@ import os
 import sys
 import time
 
+from pathlib import Path
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
 import argparse
 import paramiko
 import shortuuid
+
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
@@ -24,7 +29,7 @@ console_handler = logging.StreamHandler()
 console_handler.setFormatter(console_format)
 logger.addHandler(console_handler)
 
-REQUIRED_SETTINGS = ['host', 'port', 'username', 'password', 'local', 'remote']
+REQUIRED_SETTINGS = ['host', 'port', 'username', 'password', 'local', 'remote', 'worker_url', 'worker_psk']
 
 
 def load_settings(filename):
@@ -45,6 +50,50 @@ def load_settings(filename):
 
 def generate_shortcode():
     return shortuuid.uuid()[:8]
+
+
+class HTTPRequest:
+    def __init__(self, worker_url, worker_psk):
+        self.worker_url = worker_url
+        self.worker_psk = worker_psk
+        self.auth_header = 'X-Auth-PSK'
+        self.user_agent = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
+
+    def POST(self, data):
+        data = json.dumps(data)
+        data = str(data)
+        data = data.encode('utf-8')
+        request = Request(self.worker_url, data=data, method='POST')
+        request.add_header(self.auth_header, self.worker_psk)
+        request.add_header('Content-Type', 'application/json')
+        request.add_header('Referrer', self.worker_url)
+        request.add_header('User-Agent', self.user_agent)
+
+        with urlopen(request) as response:
+            status_code = response.status
+
+    def PUT(self, data):
+        data = json.dumps(data)
+        data = str(data)
+        data = data.encode('utf-8')
+        request = Request(self.worker_url, data=data, method='PUT')
+        request.add_header(self.auth_header, self.worker_psk)
+        request.add_header('Content-Type', 'application/json')
+        request.add_header('Referrer', self.worker_url)
+        request.add_header('User-Agent', self.user_agent)
+
+        with urlopen(request) as response:
+            status_code = response.status
+
+    def DELETE(self, shortcode):
+        request = Request(f'{self.worker_url}/{shortcode}', method='DELETE')
+        request.add_header(self.auth_header, self.worker_psk)
+        request.add_header('Referrer', self.worker_url)
+        request.add_header('User-Agent', self.user_agent)
+
+        with urlopen(request) as response:
+            status_code = response.status
 
 
 class SFTP:
@@ -69,9 +118,8 @@ class SFTP:
 
     def put(self, filename, remote_path):
         self.connect()
-        shortcode = generate_shortcode()
         remote_filename = '/'.join([remote_path, os.path.basename(filename)])
-        logger.info(f'Uploading {filename} to {remote_filename} with {shortcode}')
+        logger.info(f'Uploading {filename} to {remote_filename}')
         try:
             self.connection.put(filename, remote_filename)
         except FileNotFoundError:
@@ -151,6 +199,8 @@ class FileMonitorHandler(PatternMatchingEventHandler):
             port=self.connection_details['port']
         )
 
+        self.request = HTTPRequest(self.connection_details['worker_url'], self.connection_details['worker_psk'])
+
     def on_any_event(self, event):
         if event.is_directory:
             return
@@ -158,7 +208,9 @@ class FileMonitorHandler(PatternMatchingEventHandler):
         logger.info(f'File event occurred:\n\t{event}')
 
         if event.event_type == 'created':
+            shortcode = generate_shortcode()
             self.sftp.put(event.src_path, self.connection_details['remote'])
+            self.request.POST({'shortcode': shortcode, 'image': Path(event.src_path).name})
         elif event.event_type == 'modified':
             self.sftp.put(event.src_path, self.connection_details['remote'])
         elif event.event_type == 'moved':
@@ -172,65 +224,37 @@ class FileMonitorHandler(PatternMatchingEventHandler):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--host', help='SFTP server hostname/ip')
-    parser.add_argument('-p', '--port', help='SFTP server port', type=int)
-    parser.add_argument('-u', '--username', help='SFTP username')
-    parser.add_argument('-x', '--password', help='SFTP password')
-    parser.add_argument('-s', '--local', help='Local directory to monitor')
-    parser.add_argument('-d', '--remote', help='Remote directory to keep in sync')
-    parser.add_argument('-f', '--settings',
-                        help='Path to settings file. If set, this will be used in place of supplied arguments.')
+    parser.add_argument('-f', '--settings', help='Path to settings file')
     parsed_args = parser.parse_args()
 
     settings = None
     if parsed_args.settings:
         settings = load_settings(parsed_args.settings)
 
-    if settings:
-        logger.info(
-            f'Watchdog is running with:\n\t'
-            f'host: {settings["host"]}\n\t'
-            f'port: {settings["port"]}\n\t'
-            f'username: {settings["username"]}\n\t'
-            f'local directory: {settings["local"]}\n\t'
-            f'remote directory: {settings["remote"].rstrip("/")}'
-        )
+    if not settings:
+        logger.error('Failed to load settings')
+        sys.exit()
 
-        connection_details = {
-            'host': settings['host'],
-            'port': int(settings['port']),
-            'username': settings['username'],
-            'password': settings['password'],
-            'local': settings['local'].replace('\\\\', '\\'),
-            'remote': settings['remote'].rstrip('/')
-        }
-    else:
-        for setting in REQUIRED_SETTINGS:
-            if not hasattr(parsed_args, setting):
-                logger.error(f'Missing required argument "--{setting}" or "-f/--settings"')
-                sys.exit()
+    logger.info(
+        f'Watchdog is running with:\n\t'
+        f'host: {settings["host"]}\n\t'
+        f'port: {settings["port"]}\n\t'
+        f'username: {settings["username"]}\n\t'
+        f'local directory: {settings["local"]}\n\t'
+        f'remote directory: {settings["remote"].rstrip("/")}\n\t'
+        f'worker url: {settings["worker_url"].rstrip("/")}'
+    )
 
-            if hasattr(parsed_args, setting) and not getattr(parsed_args, setting):
-                logger.error(f'Missing required argument "--{setting}" or "-f/--settings"')
-                sys.exit()
-
-        logger.info(
-            f'Watchdog is running with:\n\t'
-            f'host: {parsed_args.host}\n\t'
-            f'port: {parsed_args.port}\n\t'
-            f'username: {parsed_args.username}\n\t'
-            f'local directory: {parsed_args.local}\n\t'
-            f'remote directory: {parsed_args.remote.rstrip("/")}'
-        )
-
-        connection_details = {
-            'host': parsed_args.host,
-            'port': parsed_args.port,
-            'username': parsed_args.username,
-            'password': parsed_args.password,
-            'local': parsed_args.local,
-            'remote': parsed_args.remote.rstrip('/')
-        }
+    connection_details = {
+        'host': settings['host'],
+        'port': int(settings['port']),
+        'username': settings['username'],
+        'password': settings['password'],
+        'local': settings['local'].replace('\\\\', '\\'),
+        'remote': settings['remote'].rstrip('/'),
+        'worker_url': settings['worker_url'].rstrip('/'),
+        'worker_psk': settings['worker_psk']
+    }
 
     watchdog = Watchdog(
         connection_details['local'],

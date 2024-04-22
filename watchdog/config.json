@@ -4,5 +4,7 @@
   "username": "",
   "password": "",
   "local": "",
-  "remote": ""
+  "remote": "",
+  "worker_url": "",
+  "worker_psk": ""
 }
