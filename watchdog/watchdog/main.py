@@ -5,7 +5,6 @@ import sys
 import time
 
 from pathlib import Path
-from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import argparse
