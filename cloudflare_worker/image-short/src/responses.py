@@ -13,6 +13,12 @@ def message_response(title, message):
 
 class Responses:
     @staticmethod
+    def status_200():
+        response = Response.new('', {'status': 200})
+        response.headers.set('Content-Type', 'text/plain')
+        return response
+
+    @staticmethod
     def status_400():
         payload = message_response('Error', 'Invalid Request')
         response = Response.new(payload, {'status': 400})
@@ -30,6 +36,13 @@ class Responses:
     def status_404():
         payload = message_response('Error', 'Not Found')
         response = Response.new(payload, {'status': 404})
+        response.headers.set('Content-Type', 'text/html')
+        return response
+
+    @staticmethod
+    def status_409():
+        payload = message_response('Error', 'Conflict')
+        response = Response.new(payload, {'status': 409})
         response.headers.set('Content-Type', 'text/html')
         return response
 

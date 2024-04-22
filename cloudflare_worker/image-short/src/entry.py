@@ -58,20 +58,26 @@ async def on_fetch(request, env):
         shortcode = data.get('exists')
         if shortcode:
             result = await env.image_db.prepare(statements.exists).bind(shortcode).raw()
-            status = 200 if result[0][0] == 1 else 404
-            response = Response.new('', {'status': status})
-            return response
+            if result[0][0] == 1:
+                return RESPONSES.status_200()
+
+            return RESPONSES.status_404()
 
         shortcode = data.get('shortcode')
         image_filename = data.get('image')
 
         if shortcode and image_filename:
+            result = await env.image_db.prepare(statements.exists).bind(shortcode).raw()
+            if result[0][0] == 1:
+                return RESPONSES.status_409()
+
             # add image entry to shortcode database
             result = await (env.image_db.prepare(statements.insert)
                             .bind(shortcode, img_url + image_filename).run())
-            status = 200 if result.success and result.meta.changes > 0 else 500
-            response = Response.new('', {'status': status})
-            return response
+            if result.success and result.meta.changes > 0:
+                return RESPONSES.status_200()
+
+            return RESPONSES.status_500()
 
         return RESPONSES.status_400()
 
@@ -85,11 +91,15 @@ async def on_fetch(request, env):
         image_filename = data.get('image')
 
         if shortcode and image_filename:
-            result = await (env.image_db.prepare(statements.update)
-                            .bind(shortcode, img_url + image_filename).run())
-            status = 200 if result.success and result.meta.changes > 0 else 500
-            response = Response.new('', {'status': status})
-            return response
+            result = await env.image_db.prepare(statements.exists).bind(shortcode).raw()
+            if result[0][0] == 0:
+                return RESPONSES.status_404()
+
+            result = await env.image_db.prepare(statements.update).bind(shortcode, img_url + image_filename).run()
+            if result.success and result.meta.changes > 0:
+                return RESPONSES.status_200()
+
+            return RESPONSES.status_500()
 
         return RESPONSES.status_400()
 
@@ -100,11 +110,16 @@ async def on_fetch(request, env):
         if not request_path:
             return RESPONSES.status_404()
 
+        result = await env.image_db.prepare(statements.exists).bind(request_path).raw()
+        if result[0][0] == 0:
+            return RESPONSES.status_404()
+
         result = await (env.image_db.prepare(statements.delete)
                         .bind(request_path).run())
+        if result.success and result.meta.changes > 0:
+            response = Response.new('', {'status': 200})
+            return response
 
-        status = 200 if result.success and result.meta.changes > 0 else 500
-        response = Response.new('', {'status': status})
-        return response
+        return RESPONSES.status_500()
 
     return RESPONSES.status_404()
