@@ -11,19 +11,6 @@ from js import Response
 RESPONSES = Responses()
 
 
-async def get_shortcode_and_filename(request):
-    put_data = await request.text()
-    put_data = json.loads(put_data)
-
-    shortcode = put_data.get('shortcode')
-    image_filename = put_data.get('image')
-
-    if not shortcode or not image_filename:
-        return RESPONSES.status_400()
-
-    return shortcode, image_filename
-
-
 def authenticate(request, env):
     header_value = request.headers.get('X-Auth-PSK')
 
@@ -64,28 +51,47 @@ async def on_fetch(request, env):
         return fetch(result.results[0].url)
 
     elif request.method == 'POST':
-        # add image entry to shortcode database
         authenticate(request, env)
-        shortcode, image_filename = await get_shortcode_and_filename(request)
+        data = await request.text()
+        data = json.loads(data)
 
-        result = await (env.image_db.prepare(statements.insert)
-                        .bind(shortcode, img_url + image_filename).run())
+        shortcode = data.get('exists')
+        if shortcode:
+            result = await env.image_db.prepare(statements.exists).bind(shortcode).raw()
+            status = 200 if result[0][0] == 1 else 404
+            response = Response.new('', {'status': status})
+            return response
 
-        status = 200 if result.success and result.meta.changes > 0 else 500
-        response = Response.new('', {'status': status})
-        return response
+        shortcode = data.get('shortcode')
+        image_filename = data.get('image')
+
+        if shortcode and image_filename:
+            # add image entry to shortcode database
+            result = await (env.image_db.prepare(statements.insert)
+                            .bind(shortcode, img_url + image_filename).run())
+            status = 200 if result.success and result.meta.changes > 0 else 500
+            response = Response.new('', {'status': status})
+            return response
+
+        return RESPONSES.status_400()
 
     elif request.method == 'PUT':
         # modify image entry in shortcode database
         authenticate(request, env)
-        shortcode, image_filename = await get_shortcode_and_filename(request)
+        data = await request.text()
+        data = json.loads(data)
 
-        result = await (env.image_db.prepare(statements.update)
-                        .bind(shortcode, img_url + image_filename).run())
+        shortcode = data.get('shortcode')
+        image_filename = data.get('image')
 
-        status = 200 if result.success and result.meta.changes > 0 else 500
-        response = Response.new(result.meta.changes, {'status': status})
-        return response
+        if shortcode and image_filename:
+            result = await (env.image_db.prepare(statements.update)
+                            .bind(shortcode, img_url + image_filename).run())
+            status = 200 if result.success and result.meta.changes > 0 else 500
+            response = Response.new('', {'status': status})
+            return response
+
+        return RESPONSES.status_400()
 
     elif request.method == 'DELETE':
         # delete image entry from shortcode database
