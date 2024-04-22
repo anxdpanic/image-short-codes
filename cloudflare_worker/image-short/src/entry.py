@@ -24,6 +24,13 @@ async def get_shortcode_and_filename(request):
     return shortcode, image_filename
 
 
+def authenticate(request, env):
+    header_value = request.headers.get('X-Auth-PSK')
+
+    if not header_value or (header_value and header_value != env.AUTHENTICATION_TOKEN):
+        return RESPONSES.status_401()
+
+
 async def prepare_database(env):
     result = await env.image_db.prepare(shortcodes_schema).run()
     if not result.success:
@@ -58,6 +65,7 @@ async def on_fetch(request, env):
 
     elif request.method == 'POST':
         # add image entry to shortcode database
+        authenticate(request, env)
         shortcode, image_filename = await get_shortcode_and_filename(request)
 
         result = await (env.image_db.prepare(statements.insert)
@@ -69,6 +77,7 @@ async def on_fetch(request, env):
 
     elif request.method == 'PUT':
         # modify image entry in shortcode database
+        authenticate(request, env)
         shortcode, image_filename = await get_shortcode_and_filename(request)
 
         result = await (env.image_db.prepare(statements.update)
@@ -80,6 +89,8 @@ async def on_fetch(request, env):
 
     elif request.method == 'DELETE':
         # delete image entry from shortcode database
+        authenticate(request, env)
+
         if not request_path:
             return RESPONSES.status_404()
 

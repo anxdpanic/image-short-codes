@@ -20,6 +20,13 @@ class Responses:
         return response
 
     @staticmethod
+    def status_401():
+        payload = message_response('Error', 'Unauthorized')
+        response = Response.new(payload, {'status': 401})
+        response.headers.set('Content-Type', 'text/html')
+        return response
+
+    @staticmethod
     def status_404():
         payload = message_response('Error', 'Not Found')
         response = Response.new(payload, {'status': 404})
