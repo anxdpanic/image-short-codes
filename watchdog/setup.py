@@ -28,8 +28,9 @@ setuptools.setup(
         "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Operating System :: OS Independent",
     ],
-    package_dir={"": "watchdog"},
-    packages=setuptools.find_packages(where="watchdog"),
+    package_dir={"main": "watchdog"},
+    packages=['main'],
     python_requires=">=3.6",
-    install_requires=required
+    install_requires=required,
+    entry_points={'console_scripts': ['watchdog-imgshort=main.main:main']},
 )

@@ -247,7 +247,7 @@ class FileMonitorHandler(PatternMatchingEventHandler):
                 logger.debug(f'No shortcode for {event.src_path}')
                 shortcode = generate_shortcode()
                 filename = Path(event.src_path).name
-                remote_filename = '/'.join([connection_details['worker_url'], shortcode])
+                remote_filename = '/'.join([self.connection_details['worker_url'], shortcode])
 
                 self.request.POST({'shortcode': shortcode, 'image': filename})
                 self.sftp.put(event.src_path, self.connection_details['remote'])
@@ -296,7 +296,7 @@ class FileMonitorHandler(PatternMatchingEventHandler):
         self.sftp.disconnect()
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--settings', help='Path to settings file', default='config.json')
     parsed_args = parser.parse_args()
@@ -346,3 +346,7 @@ if __name__ == '__main__':
         )
     )
     watchdog.run()
+
+
+if __name__ == '__main__':
+    main()
