@@ -334,7 +334,7 @@ if __name__ == '__main__':
         'discord_webhook': settings.get('discord_webhook', '')
     }
 
-    if settings.get("debug", False):
+    if settings.get('debug', False):
         logger.setLevel(level=logging.DEBUG)
 
     watchdog = Watchdog(
