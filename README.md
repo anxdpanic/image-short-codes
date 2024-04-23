@@ -1,6 +1,15 @@
 # Image Shortcode Url Generation and Hosting
 
-### Docker (nginx and sftp)
+---
+
+### Docker (nginx and sftpd)
+
+---
+
+#### Job 
+- Host images with nginx from a single directory `./data`
+- SFTPd with access to `./data` for managing image files
+
 ```shell
 git clone https://github.com/anxdpanic/image-short-codes
 cd docker
@@ -12,8 +21,20 @@ cd docker
 docker-compose up --build -d
 ```
 
+---
+
 ### Cloudflare Worker (Python)
-- Install [NodeJS](https://nodejs.org/en/download)
+
+---
+
+Requires [NodeJS](https://nodejs.org/en/download)
+
+#### Job 
+- Handle incoming http requests for shortcodes
+- Manage Cloudflare D1 database with shortcode <-> url references based on the http request (authentication header required)
+- Resolve shortcode to it's url (hosted by the nginx docker) and display the image
+
+---
 
 ```shell
 git clone https://github.com/anxdpanic/image-short-codes
@@ -43,7 +64,20 @@ npx wrangler@latest add secret AUTHENTICATION_TOKEN
 npx wrangler@latest deploy
 ```
 
-### Local Filesystem Watchdog
+---
+
+## Image Watchdog
+
+---
+
+#### Job 
+- Monitor a single folder for changes to image files
+- Mirror those changes to the sftp server to be hosted by nginx
+- Manage shortcodes through the cloudflare worker via http requests
+- Send Discord notification with new shortcodes
+
+---
+
 ```shell
 git clone https://github.com/anxdpanic/image-short-codes
 cd watchdog
@@ -57,3 +91,4 @@ pip install .
 # run
 watchdog-imgshort -f config.json
 ```
+---
