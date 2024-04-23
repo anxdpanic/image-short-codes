@@ -42,10 +42,9 @@ cd cloudflare_worker/image-short
 # RAW_IMG_BASE_URL = "https://images.example.com"
 
 # [[d1_databases]]
-# binding = "image_db"
-# database_name = "images"
 # database_id = ""
 
+cp wrangler.toml.template wrangler.toml
 nano wrangler.toml
 
 # install wrangler
