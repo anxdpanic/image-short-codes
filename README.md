@@ -1,12 +1,12 @@
 # Image Shortcode Url Generation and Hosting
 
-### Docker (nginx and sftpd)
-
----
+## Docker (nginx and sftpd)
 
 #### Job 
 - Host images with nginx from a single directory `./data`
 - SFTPd with access to `./data` for managing image files
+
+---
 
 ```shell
 git clone https://github.com/anxdpanic/image-short-codes
@@ -21,7 +21,7 @@ docker-compose up --build -d
 
 ---
 
-### Cloudflare Worker (Python)
+## Cloudflare Worker (Python)
 
 Requires [NodeJS](https://nodejs.org/en/download)
 
