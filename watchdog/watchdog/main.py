@@ -298,7 +298,7 @@ class FileMonitorHandler(PatternMatchingEventHandler):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--settings', help='Path to settings file')
+    parser.add_argument('-f', '--settings', help='Path to settings file', default='config.json')
     parsed_args = parser.parse_args()
 
     settings = None
