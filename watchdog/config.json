@@ -6,5 +6,7 @@
   "local": "",
   "remote": "",
   "worker_url": "",
-  "worker_psk": ""
+  "worker_psk": "",
+  "webhook_name": "Shortcode Notifier",
+  "discord_webhook": "https://discord.com/api/webhooks/"
 }
