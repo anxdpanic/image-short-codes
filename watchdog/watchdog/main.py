@@ -11,6 +11,7 @@ import argparse
 import paramiko
 import shortuuid
 
+from discord_webhook import DiscordWebhook, DiscordEmbed
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
@@ -28,7 +29,8 @@ console_handler = logging.StreamHandler()
 console_handler.setFormatter(console_format)
 logger.addHandler(console_handler)
 
-REQUIRED_SETTINGS = ['host', 'port', 'username', 'password', 'local', 'remote', 'worker_url', 'worker_psk']
+REQUIRED_SETTINGS = ['host', 'port', 'username', 'password', 'local', 'remote',
+                     'worker_url', 'worker_psk']
 
 
 def load_settings(filename):
@@ -49,6 +51,26 @@ def load_settings(filename):
 
 def generate_shortcode():
     return shortuuid.uuid()[:8]
+
+
+def notify_discord(webhook_url, webhook_name, shortcode, image_url, image_filename, description):
+    webhook = DiscordWebhook(url=webhook_url, username=webhook_name, rate_limit_retry=True)
+    embed = DiscordEmbed(title="Shortcode Update", description=description, color="03b2f8")
+
+    embed.set_author(name=webhook_name, icon_url=image_url)
+
+    embed.set_image(url=image_url)
+    embed.set_thumbnail(url=image_url)
+
+    embed.set_timestamp()
+
+    embed.add_embed_field(name="Shortcode", value=shortcode)
+    embed.add_embed_field(name="Image", value=image_filename)
+
+    webhook.add_embed(embed)
+    logger.info('Notifying Discord')
+    response = webhook.execute()
+    logger.info(f'Discord Response: {response.status_code}')
 
 
 class HTTPRequest:
@@ -90,7 +112,7 @@ class HTTPRequest:
         request.add_header('Referrer', self.worker_url)
         request.add_header('User-Agent', self.user_agent)
 
-        logger.info(f'PUT request: {data}')
+        logger.info(f'PUT request: {data.decode("utf-8")}')
         with urlopen(request) as response:
             logger.info(f'PUT response: {response.status}')
 
@@ -216,20 +238,30 @@ class FileMonitorHandler(PatternMatchingEventHandler):
 
         logger.info(f'File event occurred:\n\t{event}')
 
-        if event.event_type == 'created':
-            shortcode = generate_shortcode()
-            self.sftp.put(event.src_path, self.connection_details['remote'])
-            self.request.POST({'shortcode': shortcode, 'image': Path(event.src_path).name})
-        elif event.event_type == 'modified':
+        if event.event_type == 'modified':
             data = self.request.POST({'shortcode': Path(event.src_path).name})
             if not data:
-                return
-
+                data = {}
             shortcode = data.get('shortcode')
             if not shortcode:
                 logger.info(f'No shortcode for {event.src_path}')
-                self.request.POST({'shortcode': shortcode, 'image': Path(event.src_path).name})
+                shortcode = generate_shortcode()
+                filename = Path(event.src_path).name
+                remote_filename = '/'.join([connection_details['worker_url'], shortcode])
+
+                self.request.POST({'shortcode': shortcode, 'image': filename})
                 self.sftp.put(event.src_path, self.connection_details['remote'])
+
+                if 'discord_webhook' in self.connection_details and 'webhook_name' in self.connection_details:
+                    notify_discord(
+                        self.connection_details['discord_webhook'],
+                        self.connection_details['webhook_name'],
+                        shortcode,
+                        remote_filename,
+                        filename,
+                        f'Shortcode "{shortcode}" created for filename, '
+                        f'and is now available at {remote_filename}'
+                    )
                 return
 
             self.request.PUT({'shortcode': shortcode, 'image': Path(event.src_path).name})
@@ -237,7 +269,7 @@ class FileMonitorHandler(PatternMatchingEventHandler):
         elif event.event_type == 'moved':
             data = self.request.POST({'shortcode': Path(event.src_path).name})
             if not data:
-                return
+                data = {}
 
             shortcode = data.get('shortcode')
             if not shortcode:
@@ -249,7 +281,7 @@ class FileMonitorHandler(PatternMatchingEventHandler):
         elif event.event_type == 'deleted':
             data = self.request.POST({'shortcode': Path(event.src_path).name})
             if not data:
-                return
+                data = {}
 
             shortcode = data.get('shortcode')
             if not shortcode:
@@ -283,7 +315,8 @@ if __name__ == '__main__':
         f'username: {settings["username"]}\n\t'
         f'local directory: {settings["local"]}\n\t'
         f'remote directory: {settings["remote"].rstrip("/")}\n\t'
-        f'worker url: {settings["worker_url"].rstrip("/")}'
+        f'worker url: {settings["worker_url"].rstrip("/")}\n\t'
+        f'webhook name: {settings["webhook_name"]}'
     )
 
     connection_details = {
@@ -294,7 +327,9 @@ if __name__ == '__main__':
         'local': settings['local'].replace('\\\\', '\\'),
         'remote': settings['remote'].rstrip('/'),
         'worker_url': settings['worker_url'].rstrip('/'),
-        'worker_psk': settings['worker_psk']
+        'worker_psk': settings['worker_psk'],
+        'webhook_name': settings.get('webhook_name', ''),
+        'discord_webhook': settings.get('discord_webhook', '')
     }
 
     watchdog = Watchdog(
