@@ -6,7 +6,6 @@ from responses import Responses
 
 from js import console
 from js import fetch
-from js import Response
 
 RESPONSES = Responses()
 
