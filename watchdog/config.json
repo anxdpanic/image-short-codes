@@ -8,5 +8,6 @@
   "worker_url": "",
   "worker_psk": "",
   "webhook_name": "Shortcode Notifier",
-  "discord_webhook": "https://discord.com/api/webhooks/"
+  "discord_webhook": "https://discord.com/api/webhooks/",
+  "debug": false
 }

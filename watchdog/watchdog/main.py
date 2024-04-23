@@ -68,9 +68,9 @@ def notify_discord(webhook_url, webhook_name, shortcode, image_url, image_filena
     embed.add_embed_field(name="Image", value=image_filename)
 
     webhook.add_embed(embed)
-    logger.info('Notifying Discord')
+    logger.debug('Notifying Discord')
     response = webhook.execute()
-    logger.info(f'Discord Response: {response.status_code}')
+    logger.debug(f'Discord Response: {response.status_code}')
 
 
 class HTTPRequest:
@@ -91,15 +91,15 @@ class HTTPRequest:
         request.add_header('Referrer', self.worker_url)
         request.add_header('User-Agent', self.user_agent)
 
-        logger.info(f'POST request: {data.decode("utf-8")}')
+        logger.debug(f'POST request: {data.decode("utf-8")}')
         with urlopen(request) as response:
             status_code = response.status
             if status_code == 200 and 'application/json' in response.headers.get('Content-Type'):
                 payload = json.loads(response.read().decode('utf-8'))
-                logger.info(f'POST response: {payload}')
+                logger.debug(f'POST response: {payload}')
                 return payload
 
-        logger.info(f'POST response: {status_code}')
+        logger.debug(f'POST response: {status_code}')
         return None
 
     def PUT(self, data):
@@ -112,9 +112,9 @@ class HTTPRequest:
         request.add_header('Referrer', self.worker_url)
         request.add_header('User-Agent', self.user_agent)
 
-        logger.info(f'PUT request: {data.decode("utf-8")}')
+        logger.debug(f'PUT request: {data.decode("utf-8")}')
         with urlopen(request) as response:
-            logger.info(f'PUT response: {response.status}')
+            logger.debug(f'PUT response: {response.status}')
 
     def DELETE(self, shortcode):
         request = Request(f'{self.worker_url}/{shortcode}', method='DELETE')
@@ -122,9 +122,9 @@ class HTTPRequest:
         request.add_header('Referrer', self.worker_url)
         request.add_header('User-Agent', self.user_agent)
 
-        logger.info(f'DELETE request: {shortcode}')
+        logger.debug(f'DELETE request: {shortcode}')
         with urlopen(request) as response:
-            logger.info(f'DELETE response: {response.status}')
+            logger.debug(f'DELETE response: {response.status}')
 
 
 class SFTP:
@@ -145,12 +145,12 @@ class SFTP:
             self.transport = paramiko.Transport((self.host, self.port))
             self.transport.connect(username=self.username, password=self.password)
             self.connection = paramiko.SFTPClient.from_transport(self.transport)
-            logger.info('SFTP session connected')
+            logger.debug('SFTP session connected')
 
     def put(self, filename, remote_path):
         self.connect()
         remote_filename = '/'.join([remote_path, os.path.basename(filename)])
-        logger.info(f'Uploading {filename} to {remote_filename}')
+        logger.debug(f'Uploading {filename} to {remote_filename}')
         try:
             self.connection.put(filename, remote_filename)
         except FileNotFoundError:
@@ -163,7 +163,7 @@ class SFTP:
     def remove(self, filename, remote_path):
         self.connect()
         remote_filename = '/'.join([remote_path, os.path.basename(filename)])
-        logger.info(f'Removing {remote_filename}')
+        logger.debug(f'Removing {remote_filename}')
         try:
             self.connection.remove(remote_filename)
         except FileNotFoundError:
@@ -177,7 +177,7 @@ class SFTP:
         self.connect()
         remote_filename = '/'.join([remote_path, os.path.basename(new_filename)])
         old_filename = '/'.join([remote_path, os.path.basename(filename)])
-        logger.info(f'Renaming {old_filename} to {remote_filename}')
+        logger.debug(f'Renaming {old_filename} to {remote_filename}')
         try:
             self.connection.rename(old_filename, remote_filename)
         except FileNotFoundError:
@@ -193,7 +193,7 @@ class SFTP:
             self.transport.close()
             self.connection = None
             self.transport = None
-            logger.info('SFTP session terminated')
+            logger.debug('SFTP session terminated')
 
 
 class Watchdog:
@@ -208,14 +208,14 @@ class Watchdog:
             self.handler, self.directory, recursive=False
         )
         self.observer.start()
-        logger.info(f'Observer Running in {self.directory}')
+        logger.debug(f'Observer Running in {self.directory}')
         try:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
             self.observer.stop()
         self.observer.join()
-        logger.info('Observer Terminated')
+        logger.debug('Observer Terminated')
 
 
 class FileMonitorHandler(PatternMatchingEventHandler):
@@ -236,7 +236,7 @@ class FileMonitorHandler(PatternMatchingEventHandler):
         if event.is_directory:
             return
 
-        logger.info(f'File event occurred:\n\t{event}')
+        logger.debug(f'File event occurred:\n\t{event}')
 
         if event.event_type == 'modified':
             data = self.request.POST({'shortcode': Path(event.src_path).name})
@@ -244,13 +244,14 @@ class FileMonitorHandler(PatternMatchingEventHandler):
                 data = {}
             shortcode = data.get('shortcode')
             if not shortcode:
-                logger.info(f'No shortcode for {event.src_path}')
+                logger.debug(f'No shortcode for {event.src_path}')
                 shortcode = generate_shortcode()
                 filename = Path(event.src_path).name
                 remote_filename = '/'.join([connection_details['worker_url'], shortcode])
 
                 self.request.POST({'shortcode': shortcode, 'image': filename})
                 self.sftp.put(event.src_path, self.connection_details['remote'])
+                logger.info(f'{filename} is uploaded to {remote_filename}')
 
                 if 'discord_webhook' in self.connection_details and 'webhook_name' in self.connection_details:
                     notify_discord(
@@ -316,7 +317,8 @@ if __name__ == '__main__':
         f'local directory: {settings["local"]}\n\t'
         f'remote directory: {settings["remote"].rstrip("/")}\n\t'
         f'worker url: {settings["worker_url"].rstrip("/")}\n\t'
-        f'webhook name: {settings["webhook_name"]}'
+        f'webhook name: {settings["webhook_name"]}\n\t'
+        f'debug: {settings.get("debug", False)}'
     )
 
     connection_details = {
@@ -331,6 +333,9 @@ if __name__ == '__main__':
         'webhook_name': settings.get('webhook_name', ''),
         'discord_webhook': settings.get('discord_webhook', '')
     }
+
+    if settings.get("debug", False):
+        logger.setLevel(level=logging.DEBUG)
 
     watchdog = Watchdog(
         connection_details['local'],
