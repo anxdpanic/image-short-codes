@@ -1,7 +1,5 @@
 # Image Shortcode Url Generation and Hosting
 
----
-
 ### Docker (nginx and sftpd)
 
 ---
@@ -24,8 +22,6 @@ docker-compose up --build -d
 ---
 
 ### Cloudflare Worker (Python)
-
----
 
 Requires [NodeJS](https://nodejs.org/en/download)
 
@@ -67,8 +63,6 @@ npx wrangler@latest deploy
 ---
 
 ## Image Watchdog
-
----
 
 #### Job 
 - Monitor a single folder for changes to image files
