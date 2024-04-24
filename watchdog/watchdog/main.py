@@ -25,8 +25,7 @@ logging.basicConfig(
 
 logger = logging.getLogger('Watchdog')
 
-REQUIRED_SETTINGS = ['host', 'port', 'username', 'password', 'local', 'remote',
-                     'worker_url', 'worker_psk']
+REQUIRED_SETTINGS = ['host', 'port', 'username', 'password', 'local', 'remote', 'worker_url', 'worker_psk']
 
 
 def load_settings(filename):
@@ -332,8 +331,8 @@ def main():
 
     if settings.get('debug', False):
         logger.setLevel(level=logging.DEBUG)
-        console_format = logging.Formatter('%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s')
         console_handler = logging.StreamHandler()
+        console_format = logging.Formatter('%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s')
         console_handler.setFormatter(console_format)
         logger.addHandler(console_handler)
 

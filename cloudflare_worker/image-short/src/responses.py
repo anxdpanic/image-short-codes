@@ -1,5 +1,6 @@
 from static.message import message_template
 
+# noinspection PyUnresolvedReferences
 from js import Response
 
 

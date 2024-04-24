@@ -4,7 +4,9 @@ from db import statements
 from db.schema import shortcodes_schema
 from responses import Responses
 
+# noinspection PyUnresolvedReferences
 from js import console
+# noinspection PyUnresolvedReferences
 from js import fetch
 
 RESPONSES = Responses()
