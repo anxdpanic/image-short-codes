@@ -76,6 +76,7 @@ git clone https://github.com/anxdpanic/image-short-codes
 cd watchdog
 
 # configure settings for watchdog, discord webhook settings are optional
+cp config.json.template config.json
 nano config.json
 
 # install

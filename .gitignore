@@ -160,3 +160,4 @@ cython_debug/
 .idea/
 
 watchdog/settings.json
+watchdog/config.json
