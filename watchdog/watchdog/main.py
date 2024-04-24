@@ -304,6 +304,13 @@ def main():
         logger.error('Failed to load settings')
         sys.exit()
 
+    if settings.get('debug', False):
+        logger.setLevel(level=logging.DEBUG)
+        console_handler = logging.StreamHandler()
+        console_format = logging.Formatter('%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s')
+        console_handler.setFormatter(console_format)
+        logger.addHandler(console_handler)
+
     logger.info(
         f'Watchdog is running with:\n\t'
         f'host: {settings["host"]}\n\t'
@@ -328,13 +335,6 @@ def main():
         'webhook_name': settings.get('webhook_name', ''),
         'discord_webhook': settings.get('discord_webhook', '')
     }
-
-    if settings.get('debug', False):
-        logger.setLevel(level=logging.DEBUG)
-        console_handler = logging.StreamHandler()
-        console_format = logging.Formatter('%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s')
-        console_handler.setFormatter(console_format)
-        logger.addHandler(console_handler)
 
     watchdog = Watchdog(
         connection_details['local'],
