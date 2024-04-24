@@ -24,10 +24,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger('Watchdog')
-console_format = logging.Formatter('%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s')
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(console_format)
-logger.addHandler(console_handler)
 
 REQUIRED_SETTINGS = ['host', 'port', 'username', 'password', 'local', 'remote',
                      'worker_url', 'worker_psk']
@@ -336,6 +332,10 @@ def main():
 
     if settings.get('debug', False):
         logger.setLevel(level=logging.DEBUG)
+        console_format = logging.Formatter('%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s')
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(console_format)
+        logger.addHandler(console_handler)
 
     watchdog = Watchdog(
         connection_details['local'],
