@@ -133,7 +133,28 @@ class SFTP:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-    def connect(self):
+        self._idle_timestamp = ''
+
+    def timestamp(self):
+        self._idle_timestamp = time.monotonic()
+
+    def connect(self, reconnect=False):
+        if reconnect:
+            logger.debug('SFTP session reconnecting')
+            self.disconnect()
+            self._idle_timestamp = ''
+
+        if not self._idle_timestamp:
+            self.timestamp()
+        else:
+            old_timestamp = self._idle_timestamp
+            self.timestamp()
+            running_minutes, running_seconds = divmod(self._idle_timestamp - old_timestamp, 60)
+            logger.debug(f'SFTP has been idle for {int(running_minutes)} minutes and {int(running_seconds)} seconds')
+            if int(running_minutes) >= 5:
+                self.disconnect()
+                self._idle_timestamp = ''
+
         if self.connection is None:
             if self.transport is not None:
                 self.transport.close()
@@ -148,6 +169,10 @@ class SFTP:
         logger.debug(f'Uploading {filename} to {remote_filename}')
         try:
             self.connection.put(filename, remote_filename)
+            if self.transport.get_exception():
+                self.connect(reconnect=True)
+                self.connection.put(filename, remote_filename)
+            self.timestamp()
         except FileNotFoundError:
             logger.error('File not found')
         except PermissionError:
@@ -161,6 +186,10 @@ class SFTP:
         logger.debug(f'Removing {remote_filename}')
         try:
             self.connection.remove(remote_filename)
+            if self.transport.get_exception():
+                self.connect(reconnect=True)
+                self.connection.remove(remote_filename)
+            self.timestamp()
         except FileNotFoundError:
             logger.error('File not found on SFTP server')
         except PermissionError:
@@ -175,6 +204,10 @@ class SFTP:
         logger.debug(f'Renaming {old_filename} to {remote_filename}')
         try:
             self.connection.rename(old_filename, remote_filename)
+            if self.transport.get_exception():
+                self.connect(reconnect=True)
+                self.connection.rename(old_filename, remote_filename)
+            self.timestamp()
         except FileNotFoundError:
             logger.error('File not found')
         except PermissionError:
