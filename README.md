@@ -79,10 +79,19 @@ cd watchdog
 cp config.json.template config.json
 nano config.json
 
+## Linux
 # install
 pip install .
-
-# run
+# confirm working
 watchdog-imgshort -f config.json
+# run in the background
+screen -dmS ImageWatchdog watchdog-imgshort -f config.json
+
+## Windows
+# confirm working
+python watchdog\main.py -f config.json
+# run in the background
+pythonw watchdog\main.py -f config.json
 ```
+
 ---
