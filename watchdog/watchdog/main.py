@@ -61,24 +61,85 @@ def generate_shortcode():
     return shortuuid.uuid()[:8]
 
 
-def notify_discord(webhook_url, webhook_name, shortcode, image_url, image_filename, description):
-    webhook = DiscordWebhook(url=webhook_url, username=webhook_name, rate_limit_retry=True)
-    embed = DiscordEmbed(title='Shortcode Update', description=description, color='03b2f8')
+class Discord:
+    def __init__(self, webhook_url, webhook_name):
+        self._url = webhook_url
+        self._name = webhook_name
+        self._id_file = 'webhook_ids.json'
+        self._webhook_ids = load_json(self._id_file)
 
-    embed.set_author(name=webhook_name, icon_url=image_url)
+    @property
+    def name(self):
+        return self._name
 
-    embed.set_image(url=image_url)
-    embed.set_thumbnail(url=image_url)
+    @property
+    def ids(self):
+        return self._webhook_ids
 
-    embed.set_timestamp()
+    def notify(self, shortcode, image_url, image_filename, description):
+        webhook = DiscordWebhook(url=self._url, username=self.name, rate_limit_retry=True)
+        embed = DiscordEmbed(title='Shortcode Update', description=description, color='03b2f8')
 
-    embed.add_embed_field(name="Shortcode", value=shortcode)
-    embed.add_embed_field(name="Image", value=image_filename)
+        embed.set_author(name=self.name, icon_url=image_url)
 
-    webhook.add_embed(embed)
-    logger.debug('Notifying Discord')
-    response = webhook.execute()
-    logger.debug(f'Discord Response: {response.status_code}')
+        embed.set_image(url=image_url)
+        embed.set_thumbnail(url=image_url)
+
+        embed.set_timestamp()
+
+        embed.add_embed_field(name="Shortcode", value=shortcode)
+        embed.add_embed_field(name="Image", value=image_filename)
+
+        webhook.add_embed(embed)
+        logger.debug('Notifying Discord')
+        response = webhook.execute()
+        logger.debug(f'Discord response: {response.status_code}')
+        logger.debug(f'Discord webhook id: {webhook.id}')
+
+        if webhook.id:
+            self._webhook_ids[shortcode] = webhook.id
+            save_json(self._id_file, self._webhook_ids)
+            logger.debug(f'Discord webhook ids updated with {webhook.id} for {shortcode}')
+
+    def edit(self, shortcode, image_url, image_filename, description):
+        if shortcode not in self._webhook_ids.keys():
+            logger.debug(f'Discord webhook id for {shortcode} not found')
+            return
+
+        webhook = DiscordWebhook(url=self._url, username=self.name, rate_limit_retry=True)
+        embed = DiscordEmbed(title='Shortcode Update', description=description, color='03b2f8')
+
+        webhook.id = self._webhook_ids[shortcode]
+
+        embed.set_author(name=self.name, icon_url=image_url)
+
+        embed.set_image(url=image_url)
+        embed.set_thumbnail(url=image_url)
+
+        embed.set_timestamp()
+
+        embed.add_embed_field(name="Shortcode", value=shortcode)
+        embed.add_embed_field(name="Image", value=image_filename)
+
+        webhook.add_embed(embed)
+        logger.debug(f'Editing Discord webhook id {webhook.id}')
+        response = webhook.edit()
+        logger.debug(f'Discord response: {response.status_code}')
+
+    def delete(self, shortcode):
+        if shortcode not in self.ids.keys():
+            logger.debug(f'Discord webhook id for {shortcode} not found')
+            return
+
+        webhook = DiscordWebhook(url=self._url, username=self.name, rate_limit_retry=True)
+        webhook.id = self.ids[shortcode]
+        logger.debug(f'Deleting Discord webhook id {webhook.id}')
+        response = webhook.delete()
+        logger.debug(f'Discord response: {response.status_code} Id: {webhook.id}')
+        if 200 <= response.status_code < 300:
+            del self.ids[shortcode]
+            save_json(self._id_file, self.ids)
+            logger.debug(f'Discord webhook id removed {webhook.id} for {shortcode}')
 
 
 class HTTPRequest:
@@ -336,6 +397,12 @@ class FileMonitorHandler(PatternMatchingEventHandler):
         )
 
         self._request = HTTPRequest(self._connection_details['worker_url'], self._connection_details['worker_psk'])
+        self._discord = None
+        if 'discord_webhook' in self._connection_details and 'webhook_name' in self._connection_details:
+            self._discord = Discord(
+                self._connection_details['discord_webhook'],
+                self._connection_details['webhook_name']
+            )
 
     def on_any_event(self, event):
         if event.is_directory:
@@ -349,32 +416,32 @@ class FileMonitorHandler(PatternMatchingEventHandler):
             if not data:
                 data = {}
 
+            filename = Path(event.src_path).name
             shortcode = data.get('shortcode')
             if not shortcode:
                 logger.debug(f'No shortcode for {event.src_path}')
                 shortcode = generate_shortcode()
-                filename = Path(event.src_path).name
-                remote_filename = '/'.join([self._connection_details['worker_url'], shortcode])
+                shortcode_url = '/'.join([self._connection_details['worker_url'], shortcode])
 
                 self._request.POST({'shortcode': shortcode, 'image': filename})
                 self._sftp.put(event.src_path, self._connection_details['remote'])
-                logger.info(f'{filename} is uploaded to {remote_filename}')
+                logger.info(f'{filename} is uploaded to {shortcode_url}')
 
-                if 'discord_webhook' in self._connection_details and 'webhook_name' in self._connection_details:
-                    notify_discord(
-                        self._connection_details['discord_webhook'],
-                        self._connection_details['webhook_name'],
+                if self._discord:
+                    self._discord.notify(
                         shortcode,
-                        remote_filename,
+                        shortcode_url,
                         filename,
                         f'Shortcode "{shortcode}" created for filename, '
-                        f'and is now available at {remote_filename}'
+                        f'and is now available at {shortcode_url}'
                     )
-                logger.debug(f'Response to file event completed.\n\thash: {event_hash}')
-                return
 
-            self._request.PUT({'shortcode': shortcode, 'image': Path(event.src_path).name})
-            self._sftp.put(event.src_path, self._connection_details['remote'])
+            else:
+                shortcode_url = '/'.join([self._connection_details['worker_url'], shortcode])
+
+                self._request.PUT({'shortcode': shortcode, 'image': Path(event.src_path).name})
+                self._sftp.put(event.src_path, self._connection_details['remote'])
+                logger.info(f'{filename} is uploaded to {shortcode_url}')
 
         elif event.event_type == 'moved':
             data = self._request.POST({'shortcode': Path(event.src_path).name})
@@ -386,8 +453,22 @@ class FileMonitorHandler(PatternMatchingEventHandler):
                 logger.error(f'No shortcode for {event.src_path}')
                 return
 
-            self._request.PUT({'shortcode': shortcode, 'image': Path(event.dest_path).name})
+            filename = Path(event.dest_path).name
+            old_filename = Path(event.src_path).name
+            shortcode_url = '/'.join([self._connection_details['worker_url'], shortcode])
+
+            self._request.PUT({'shortcode': shortcode, 'image': filename})
             self._sftp.rename(event.src_path, event.dest_path, self._connection_details['remote'])
+            logger.info(f'Moved {old_filename} to {filename}')
+
+            if self._discord:
+                self._discord.edit(
+                    shortcode,
+                    shortcode_url,
+                    filename,
+                    f'Shortcode "{shortcode}" created for filename, '
+                    f'and is now available at {shortcode_url}'
+                )
 
         elif event.event_type == 'deleted':
             data = self._request.POST({'shortcode': Path(event.src_path).name})
@@ -399,8 +480,14 @@ class FileMonitorHandler(PatternMatchingEventHandler):
                 logger.error(f'No shortcode for {event.src_path}')
                 return
 
+            filename = Path(event.src_path).name
+
             self._request.DELETE(shortcode)
             self._sftp.remove(event.src_path, self._connection_details['remote'])
+            logger.info(f'Deleted {filename}')
+
+            if self._discord:
+                self._discord.delete(shortcode)
 
         logger.debug(f'Response to file event completed.\n\thash: {event_hash}')
 
