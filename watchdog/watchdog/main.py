@@ -420,7 +420,8 @@ def main():
     watchdog = Watchdog(
         connection_details['local'],
         FileMonitorHandler(
-            patterns=['*.jpg', '*.jpeg', '*.png', '*.gif', '*.bmp', '*.webp'],
+            patterns=['*.webp', '*.jpg', '*.jpeg', '*.png', '*.apng', '*.gif', '*.svg',
+                      '*.bmp', '*.ico', '*.tiff', '*.pdf', '*.jpg2', '*.jxr'],
             ignore_directories=True,
             connection_details=connection_details
         )
