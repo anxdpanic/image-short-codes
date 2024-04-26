@@ -29,13 +29,25 @@ logger = logging.getLogger('Watchdog')
 REQUIRED_SETTINGS = ['host', 'port', 'username', 'password', 'local', 'remote', 'worker_url', 'worker_psk']
 
 
+def load_json(filename):
+    if not os.path.isfile(filename):
+        return {}
+
+    with open(filename, 'r') as _file:
+        return json.load(_file)
+
+
+def save_json(filename, data):
+    with open(filename, 'w') as _file:
+        json.dump(data, _file)
+
+
 def load_settings(filename):
     if not os.path.isfile(filename):
         logger.error(f'Settings file does not exist. "{filename}"')
         return None
 
-    with open(filename, 'r') as settings_file:
-        payload = json.load(settings_file)
+    payload = load_json(filename)
 
     for setting in REQUIRED_SETTINGS:
         if setting not in payload.keys():
