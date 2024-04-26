@@ -210,10 +210,22 @@ class SFTP:
                 del self.timestamp
 
         if self.connection is None:
-            if self._transport is not None:
-                self._transport.close()
-            self._transport = paramiko.Transport((self.host, self.port))
-            self._transport.connect(username=self.username, password=self._password)
+            for retry in range(5):
+                try:
+                    logger.debug('SFTP attempting to connect')
+                    if self._transport is not None:
+                        self._transport.close()
+                    self._transport = paramiko.Transport((self.host, self.port))
+                    self._transport.set_keepalive(5)
+                    self._transport.connect(username=self.username, password=self._password)
+                    break
+                except (ConnectionError, EOFError):
+                    if retry < 4:
+                        logger.error('SFTP connection failed, retrying in 5 seconds')
+                        time.sleep(5)
+                    else:
+                        raise
+
             self.connection = paramiko.SFTPClient.from_transport(self._transport)
             logger.debug('SFTP session connected')
 
