@@ -227,6 +227,10 @@ class SFTP:
                 self.connect(reconnect=True)
                 self.connection.put(filename, remote_filename)
             self.timestamp = 'now'
+        except ConnectionError:
+            self.connect(reconnect=True)
+            self.connection.put(filename, remote_filename)
+            self.timestamp = 'now'
         except FileNotFoundError:
             logger.error('File not found')
         except PermissionError:
@@ -243,6 +247,10 @@ class SFTP:
             if self._transport.get_exception():
                 self.connect(reconnect=True)
                 self.connection.remove(remote_filename)
+            self.timestamp = 'now'
+        except ConnectionError:
+            self.connect(reconnect=True)
+            self.connection.remove(remote_filename)
             self.timestamp = 'now'
         except FileNotFoundError:
             logger.error('File not found on SFTP server')
@@ -261,6 +269,10 @@ class SFTP:
             if self._transport.get_exception():
                 self.connect(reconnect=True)
                 self.connection.rename(old_filename, remote_filename)
+            self.timestamp = 'now'
+        except ConnectionError:
+            self.connect(reconnect=True)
+            self.connection.rename(old_filename, remote_filename)
             self.timestamp = 'now'
         except FileNotFoundError:
             logger.error('File not found')
