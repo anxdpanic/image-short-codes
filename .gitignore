@@ -161,3 +161,4 @@ cython_debug/
 
 watchdog/settings.json
 watchdog/config.json
+watchdog/webhook_ids.json
