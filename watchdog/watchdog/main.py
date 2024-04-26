@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -50,7 +51,7 @@ def generate_shortcode():
 
 def notify_discord(webhook_url, webhook_name, shortcode, image_url, image_filename, description):
     webhook = DiscordWebhook(url=webhook_url, username=webhook_name, rate_limit_retry=True)
-    embed = DiscordEmbed(title="Shortcode Update", description=description, color="03b2f8")
+    embed = DiscordEmbed(title='Shortcode Update', description=description, color='03b2f8')
 
     embed.set_author(name=webhook_name, icon_url=image_url)
 
@@ -70,21 +71,25 @@ def notify_discord(webhook_url, webhook_name, shortcode, image_url, image_filena
 
 class HTTPRequest:
     def __init__(self, worker_url, worker_psk):
-        self.worker_url = worker_url
-        self.worker_psk = worker_psk
-        self.auth_header = 'X-Auth-PSK'
-        self.user_agent = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
+        self._worker_url = worker_url
+        self._worker_psk = worker_psk
+        self._auth_header = 'X-Auth-PSK'
+        self._user_agent = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                            'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
 
-    def POST(self, data):
+    @staticmethod
+    def _encode_request_data(data):
         data = json.dumps(data)
         data = str(data)
-        data = data.encode('utf-8')
-        request = Request(self.worker_url, data=data, method='POST')
-        request.add_header(self.auth_header, self.worker_psk)
+        return data.encode('utf-8')
+
+    def POST(self, data):
+        data = self._encode_request_data(data)
+        request = Request(self._worker_url, data=data, method='POST')
+        request.add_header(self._auth_header, self._worker_psk)
         request.add_header('Content-Type', 'application/json')
-        request.add_header('Referrer', self.worker_url)
-        request.add_header('User-Agent', self.user_agent)
+        request.add_header('Referrer', self._worker_url)
+        request.add_header('User-Agent', self._user_agent)
 
         logger.debug(f'POST request: {data.decode("utf-8")}')
         with urlopen(request) as response:
@@ -98,24 +103,22 @@ class HTTPRequest:
         return None
 
     def PUT(self, data):
-        data = json.dumps(data)
-        data = str(data)
-        data = data.encode('utf-8')
-        request = Request(self.worker_url, data=data, method='PUT')
-        request.add_header(self.auth_header, self.worker_psk)
+        data = self._encode_request_data(data)
+        request = Request(self._worker_url, data=data, method='PUT')
+        request.add_header(self._auth_header, self._worker_psk)
         request.add_header('Content-Type', 'application/json')
-        request.add_header('Referrer', self.worker_url)
-        request.add_header('User-Agent', self.user_agent)
+        request.add_header('Referrer', self._worker_url)
+        request.add_header('User-Agent', self._user_agent)
 
         logger.debug(f'PUT request: {data.decode("utf-8")}')
         with urlopen(request) as response:
             logger.debug(f'PUT response: {response.status}')
 
     def DELETE(self, shortcode):
-        request = Request(f'{self.worker_url}/{shortcode}', method='DELETE')
-        request.add_header(self.auth_header, self.worker_psk)
-        request.add_header('Referrer', self.worker_url)
-        request.add_header('User-Agent', self.user_agent)
+        request = Request(f'{self._worker_url}/{shortcode}', method='DELETE')
+        request.add_header(self._auth_header, self._worker_psk)
+        request.add_header('Referrer', self._worker_url)
+        request.add_header('User-Agent', self._user_agent)
 
         logger.debug(f'DELETE request: {shortcode}')
         with urlopen(request) as response:
@@ -124,43 +127,82 @@ class HTTPRequest:
 
 class SFTP:
     def __init__(self, host, user, password, port=22, **kwargs):
-        self.host = host.rstrip('/')
-        self.username = user
-        self.password = password
-        self.port = port
-        self.connection = None
-        self.transport = None
+        self._host = host.rstrip('/')
+        self._port = port
+        self._username = user
+        self._password = password
+        self._connection = None
+        self._transport = None
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-        self._idle_timestamp = ''
+        self._idle_timestamp_default = -1.0
+        self._idle_timestamp = self._idle_timestamp_default
 
+    @property
+    def host(self):
+        return self._host
+
+    @property
+    def port(self):
+        return self._port
+
+    @property
+    def username(self):
+        return self._username
+
+    @property
+    def connection(self):
+        return self._connection
+
+    @connection.setter
+    def connection(self, value):
+        self._connection = value
+
+    @connection.deleter
+    def connection(self):
+        if self.connection:
+            self.connection.close()
+        self._connection = None
+
+    @property
     def timestamp(self):
-        self._idle_timestamp = time.monotonic()
+        return self._idle_timestamp
+
+    @timestamp.setter
+    def timestamp(self, value):
+        if value == 'now':
+            self._idle_timestamp = time.monotonic()
+        else:
+            del self.timestamp
+
+    @timestamp.deleter
+    def timestamp(self):
+        self._idle_timestamp = self._idle_timestamp_default
 
     def connect(self, reconnect=False):
         if reconnect:
             logger.debug('SFTP session reconnecting')
             self.disconnect()
-            self._idle_timestamp = ''
+            del self.timestamp
 
-        if not self._idle_timestamp:
-            self.timestamp()
+        if self.timestamp == self._idle_timestamp_default:
+            self.timestamp = 'now'
         else:
-            old_timestamp = self._idle_timestamp
-            self.timestamp()
-            running_minutes, running_seconds = divmod(self._idle_timestamp - old_timestamp, 60)
+            old_timestamp = self.timestamp
+            self.timestamp = 'now'
+            running_minutes, running_seconds = divmod(self.timestamp - old_timestamp, 60)
             logger.debug(f'SFTP has been idle for {int(running_minutes)} minutes and {int(running_seconds)} seconds')
             if int(running_minutes) >= 5:
                 self.disconnect()
-                self._idle_timestamp = ''
+                del self.timestamp
 
         if self.connection is None:
-            if self.transport is not None:
-                self.transport.close()
-            self.transport = paramiko.Transport((self.host, self.port))
-            self.transport.connect(username=self.username, password=self.password)
-            self.connection = paramiko.SFTPClient.from_transport(self.transport)
+            if self._transport is not None:
+                self._transport.close()
+            self._transport = paramiko.Transport((self.host, self.port))
+            self._transport.connect(username=self.username, password=self._password)
+            self.connection = paramiko.SFTPClient.from_transport(self._transport)
             logger.debug('SFTP session connected')
 
     def put(self, filename, remote_path):
@@ -169,10 +211,10 @@ class SFTP:
         logger.debug(f'Uploading {filename} to {remote_filename}')
         try:
             self.connection.put(filename, remote_filename)
-            if self.transport.get_exception():
+            if self._transport.get_exception():
                 self.connect(reconnect=True)
                 self.connection.put(filename, remote_filename)
-            self.timestamp()
+            self.timestamp = 'now'
         except FileNotFoundError:
             logger.error('File not found')
         except PermissionError:
@@ -186,10 +228,10 @@ class SFTP:
         logger.debug(f'Removing {remote_filename}')
         try:
             self.connection.remove(remote_filename)
-            if self.transport.get_exception():
+            if self._transport.get_exception():
                 self.connect(reconnect=True)
                 self.connection.remove(remote_filename)
-            self.timestamp()
+            self.timestamp = 'now'
         except FileNotFoundError:
             logger.error('File not found on SFTP server')
         except PermissionError:
@@ -204,10 +246,10 @@ class SFTP:
         logger.debug(f'Renaming {old_filename} to {remote_filename}')
         try:
             self.connection.rename(old_filename, remote_filename)
-            if self.transport.get_exception():
+            if self._transport.get_exception():
                 self.connect(reconnect=True)
                 self.connection.rename(old_filename, remote_filename)
-            self.timestamp()
+            self.timestamp = 'now'
         except FileNotFoundError:
             logger.error('File not found')
         except PermissionError:
@@ -217,86 +259,89 @@ class SFTP:
 
     def disconnect(self):
         if self.connection is not None:
-            self.connection.close()
-            self.transport.close()
-            self.connection = None
-            self.transport = None
+            self._transport.close()
+            self._transport = None
+            del self.connection
             logger.debug('SFTP session terminated')
 
 
 class Watchdog:
 
     def __init__(self, directory, handler):
-        self.observer = Observer()
-        self.handler = handler
-        self.directory = directory
+        self._observer = Observer()
+        self._handler = handler
+        self._directory = directory
 
     def run(self):
-        self.observer.schedule(
-            self.handler, self.directory, recursive=False
+        self._observer.schedule(
+            self._handler, self._directory, recursive=False
         )
-        self.observer.start()
-        logger.debug(f'Observer Running in {self.directory}')
+        self._observer.start()
+        logger.debug(f'Observer Running in {self._directory}')
         try:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            self.observer.stop()
-        self.observer.join()
+            self._observer.stop()
+        self._observer.join()
         logger.debug('Observer Terminated')
 
 
 class FileMonitorHandler(PatternMatchingEventHandler):
     def __init__(self, *args, **kwargs):
-        self.connection_details = kwargs.pop('connection_details')
+        self._connection_details = kwargs.pop('connection_details')
         super(FileMonitorHandler, self).__init__(*args, **kwargs)
 
-        self.sftp = SFTP(
-            host=self.connection_details['host'],
-            user=self.connection_details['username'],
-            password=self.connection_details['password'],
-            port=self.connection_details['port']
+        self._sftp = SFTP(
+            host=self._connection_details['host'],
+            user=self._connection_details['username'],
+            password=self._connection_details['password'],
+            port=self._connection_details['port']
         )
 
-        self.request = HTTPRequest(self.connection_details['worker_url'], self.connection_details['worker_psk'])
+        self._request = HTTPRequest(self._connection_details['worker_url'], self._connection_details['worker_psk'])
 
     def on_any_event(self, event):
         if event.is_directory:
             return
 
-        logger.debug(f'File event occurred:\n\t{event}')
+        event_hash = hashlib.md5(event.__str__().encode('utf-8')).hexdigest()
+        logger.debug(f'File event occurred:\n\tevent: {event}\n\thash: {event_hash}')
 
         if event.event_type == 'modified':
-            data = self.request.POST({'shortcode': Path(event.src_path).name})
+            data = self._request.POST({'shortcode': Path(event.src_path).name})
             if not data:
                 data = {}
+
             shortcode = data.get('shortcode')
             if not shortcode:
                 logger.debug(f'No shortcode for {event.src_path}')
                 shortcode = generate_shortcode()
                 filename = Path(event.src_path).name
-                remote_filename = '/'.join([self.connection_details['worker_url'], shortcode])
+                remote_filename = '/'.join([self._connection_details['worker_url'], shortcode])
 
-                self.request.POST({'shortcode': shortcode, 'image': filename})
-                self.sftp.put(event.src_path, self.connection_details['remote'])
+                self._request.POST({'shortcode': shortcode, 'image': filename})
+                self._sftp.put(event.src_path, self._connection_details['remote'])
                 logger.info(f'{filename} is uploaded to {remote_filename}')
 
-                if 'discord_webhook' in self.connection_details and 'webhook_name' in self.connection_details:
+                if 'discord_webhook' in self._connection_details and 'webhook_name' in self._connection_details:
                     notify_discord(
-                        self.connection_details['discord_webhook'],
-                        self.connection_details['webhook_name'],
+                        self._connection_details['discord_webhook'],
+                        self._connection_details['webhook_name'],
                         shortcode,
                         remote_filename,
                         filename,
                         f'Shortcode "{shortcode}" created for filename, '
                         f'and is now available at {remote_filename}'
                     )
+                logger.debug(f'Response to file event completed.\n\thash: {event_hash}')
                 return
 
-            self.request.PUT({'shortcode': shortcode, 'image': Path(event.src_path).name})
-            self.sftp.put(event.src_path, self.connection_details['remote'])
+            self._request.PUT({'shortcode': shortcode, 'image': Path(event.src_path).name})
+            self._sftp.put(event.src_path, self._connection_details['remote'])
+
         elif event.event_type == 'moved':
-            data = self.request.POST({'shortcode': Path(event.src_path).name})
+            data = self._request.POST({'shortcode': Path(event.src_path).name})
             if not data:
                 data = {}
 
@@ -305,10 +350,11 @@ class FileMonitorHandler(PatternMatchingEventHandler):
                 logger.error(f'No shortcode for {event.src_path}')
                 return
 
-            self.request.PUT({'shortcode': shortcode, 'image': Path(event.dest_path).name})
-            self.sftp.rename(event.src_path, event.dest_path, self.connection_details['remote'])
+            self._request.PUT({'shortcode': shortcode, 'image': Path(event.dest_path).name})
+            self._sftp.rename(event.src_path, event.dest_path, self._connection_details['remote'])
+
         elif event.event_type == 'deleted':
-            data = self.request.POST({'shortcode': Path(event.src_path).name})
+            data = self._request.POST({'shortcode': Path(event.src_path).name})
             if not data:
                 data = {}
 
@@ -317,11 +363,13 @@ class FileMonitorHandler(PatternMatchingEventHandler):
                 logger.error(f'No shortcode for {event.src_path}')
                 return
 
-            self.request.DELETE(shortcode)
-            self.sftp.remove(event.src_path, self.connection_details['remote'])
+            self._request.DELETE(shortcode)
+            self._sftp.remove(event.src_path, self._connection_details['remote'])
+
+        logger.debug(f'Response to file event completed.\n\thash: {event_hash}')
 
     def __del__(self):
-        self.sftp.disconnect()
+        self._sftp.disconnect()
 
 
 def main():
