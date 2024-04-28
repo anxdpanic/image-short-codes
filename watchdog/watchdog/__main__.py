@@ -39,99 +39,112 @@ def save_json(filename, data):
         json.dump(data, _file)
 
 
-def load_settings(filename):
-    schema = {
-        "$schema": "http://json-schema.org/schema#",
-        "type": "object",
-        "properties": {
-            "sftp": {
-                "type": "object",
-                "properties": {
-                    "host": {
-                        "type": "string"
+class Config:
+    def __init__(self, config_file):
+        self._filename = config_file
+        self._settings = self._load()
+
+    @property
+    def settings(self):
+        return self._settings
+
+    @property
+    def schema(self):
+        return {
+            "$schema": "http://json-schema.org/schema#",
+            "type": "object",
+            "properties": {
+                "sftp": {
+                    "type": "object",
+                    "properties": {
+                        "host": {
+                            "type": "string"
+                        },
+                        "port": {
+                            "type": "integer"
+                        },
+                        "username": {
+                            "type": "string"
+                        },
+                        "password": {
+                            "type": "string"
+                        },
+                        "local_path": {
+                            "type": "string"
+                        },
+                        "remote_path": {
+                            "type": "string"
+                        }
                     },
-                    "port": {
-                        "type": "integer"
-                    },
-                    "username": {
-                        "type": "string"
-                    },
-                    "password": {
-                        "type": "string"
-                    },
-                    "local_path": {
-                        "type": "string"
-                    },
-                    "remote_path": {
-                        "type": "string"
-                    }
+                    "required": [
+                        "host",
+                        "local_path",
+                        "password",
+                        "port",
+                        "remote_path",
+                        "username"
+                    ]
                 },
-                "required": [
-                    "host",
-                    "local_path",
-                    "password",
-                    "port",
-                    "remote_path",
-                    "username"
-                ]
-            },
-            "cloudflare": {
-                "type": "object",
-                "properties": {
-                    "worker_url": {
-                        "type": "string"
+                "cloudflare": {
+                    "type": "object",
+                    "properties": {
+                        "worker_url": {
+                            "type": "string"
+                        },
+                        "worker_psk": {
+                            "type": "string"
+                        }
                     },
-                    "worker_psk": {
-                        "type": "string"
-                    }
+                    "required": [
+                        "worker_psk",
+                        "worker_url"
+                    ]
                 },
-                "required": [
-                    "worker_psk",
-                    "worker_url"
-                ]
-            },
-            "discord": {
-                "type": "object",
-                "properties": {
-                    "webhook": {
-                        "type": "string"
+                "discord": {
+                    "type": "object",
+                    "properties": {
+                        "webhook": {
+                            "type": "string"
+                        },
+                        "author": {
+                            "type": "string"
+                        },
+                        "author_icon": {
+                            "type": "string"
+                        },
+                        "embed_title": {
+                            "type": "string"
+                        },
+                        "embed_color": {
+                            "type": "string"
+                        }
                     },
-                    "author": {
-                        "type": "string"
-                    },
-                    "author_icon": {
-                        "type": "string"
-                    },
-                    "embed_title": {
-                        "type": "string"
-                    },
-                    "embed_color": {
-                        "type": "string"
-                    }
+                    "required": [
+                        "webhook"
+                    ]
                 },
-                "required": [
-                    "webhook"
-                ]
+                "debug": {
+                    "type": "boolean"
+                }
             },
-            "debug": {
-                "type": "boolean"
-            }
-        },
-        "required": [
-            "cloudflare",
-            "sftp"
-        ]
-    }
+            "required": [
+                "cloudflare",
+                "sftp"
+            ]
+        }
 
-    if not os.path.isfile(filename):
-        logger.error(f'Settings file does not exist. "{filename}"')
-        return None
+    def _validate(self, data):
+        validate(data, self.schema)
 
-    payload = load_json(filename)
+    def _load(self):
+        if not os.path.isfile(self._filename):
+            raise FileNotFoundError(f'Settings file does not exist. "{self._filename}"')
 
-    validate(instance=payload, schema=schema)
+        with open(self._filename, 'r') as _file:
+            payload = json.load(_file)
 
-    return payload
+        self._validate(payload)
+        return payload
 
 
 def generate_shortcode():
@@ -584,13 +597,7 @@ def main():
     parser.add_argument('-f', '--settings', help='Path to settings file', default='config.json')
     parsed_args = parser.parse_args()
 
-    settings = None
-    if parsed_args.settings:
-        settings = load_settings(parsed_args.settings)
-
-    if not settings:
-        logger.error('Failed to load settings')
-        sys.exit()
+    settings = Config(parsed_args.settings).settings
 
     if settings.get('debug', False):
         logger.setLevel(level=logging.DEBUG)
