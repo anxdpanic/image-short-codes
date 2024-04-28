@@ -1,15 +1,14 @@
-import json
 import logging
-import os
 
 from discord_webhook import DiscordWebhook, DiscordEmbed
 
+from .base import BaseNotifier
 from .. import __logger__
 
 logger = logging.getLogger(__logger__)
 
 
-class Discord:
+class Discord(BaseNotifier):
     def __init__(self, webhook, author, author_icon, embed_title, embed_color):
         self._url = webhook
         self._name = author
@@ -18,19 +17,6 @@ class Discord:
         self._color = embed_color
         self._id_file = 'webhook_ids.json'
         self._webhook_ids = self._load_json(self._id_file)
-
-    @staticmethod
-    def _load_json(filename):
-        if not os.path.isfile(filename):
-            return {}
-
-        with open(filename, 'r') as _file:
-            return json.load(_file)
-
-    @staticmethod
-    def _save_json(filename, data):
-        with open(filename, 'w') as _file:
-            json.dump(data, _file)
 
     @property
     def name(self):

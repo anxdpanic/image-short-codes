@@ -83,8 +83,7 @@ class ImageHandler(PatternMatchingEventHandler):
                         shortcode,
                         shortcode_url,
                         filename,
-                        f'Shortcode "{shortcode}" created for filename, '
-                        f'and is now available at {shortcode_url}'
+                        self._discord.description(shortcode, shortcode_url)
                     )
 
             else:
@@ -110,8 +109,7 @@ class ImageHandler(PatternMatchingEventHandler):
                     shortcode,
                     shortcode_url,
                     filename,
-                    f'Shortcode "{shortcode}" created for filename, '
-                    f'and is now available at {shortcode_url}'
+                    self._discord.description(shortcode, shortcode_url)
                 )
 
         elif event.event_type == 'deleted':
