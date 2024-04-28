@@ -1,13 +1,22 @@
 {
-  "host": "",
-  "port": 2222,
-  "username": "",
-  "password": "",
-  "local": "",
-  "remote": "",
-  "worker_url": "",
-  "worker_psk": "",
-  "webhook_name": "Shortcode Notifier",
-  "discord_webhook": "https://discord.com/api/webhooks/",
+  "sftp": {
+    "host": "",
+    "port": 2222,
+    "username": "",
+    "password": "",
+    "local_path": "",
+    "remote_path": "data"
+  },
+  "cloudflare": {
+    "worker_url": "https://",
+    "worker_psk": ""
+  },
+  "discord": {
+    "webhook": "https://discord.com/api/webhooks/",
+    "author": "Shortcode Notifier",
+    "author_icon": "webhook-author.png",
+    "embed_title": "Shortcode Update",
+    "embed_color": "03b2f8"
+  },
   "debug": false
 }
