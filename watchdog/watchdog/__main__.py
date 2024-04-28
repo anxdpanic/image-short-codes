@@ -168,8 +168,7 @@ class Discord:
     def ids(self):
         return self._webhook_ids
 
-    def notify(self, shortcode, image_url, image_filename, description):
-        webhook = DiscordWebhook(url=self._url, username=self.name, rate_limit_retry=True)
+    def _get_shortcode_embed(self, shortcode, image_url, image_filename, description):
         embed = DiscordEmbed(title=self.title, description=description, color=self.color)
 
         embed.set_author(name=self.name, icon_url=self.icon)
@@ -181,8 +180,13 @@ class Discord:
 
         embed.add_embed_field(name="Shortcode", value=shortcode)
         embed.add_embed_field(name="Image", value=image_filename)
+        return embed
 
+    def notify(self, shortcode, image_url, image_filename, description):
+        webhook = DiscordWebhook(url=self._url, username=self.name, rate_limit_retry=True)
+        embed = self._get_shortcode_embed(shortcode, image_url, image_filename, description)
         webhook.add_embed(embed)
+
         logger.debug('Notifying Discord')
         response = webhook.execute()
         logger.debug(f'Discord response: {response.status_code}')
@@ -199,21 +203,10 @@ class Discord:
             return
 
         webhook = DiscordWebhook(url=self._url, username=self.name, rate_limit_retry=True)
-        embed = DiscordEmbed(title=self.title, description=description, color=self.color)
-
+        embed = self._get_shortcode_embed(shortcode, image_url, image_filename, description)
+        webhook.add_embed(embed)
         webhook.id = self.ids[shortcode]
 
-        embed.set_author(name=self.name, icon_url=self.icon)
-
-        embed.set_image(url=image_url)
-        embed.set_thumbnail(url=image_url)
-
-        embed.set_timestamp()
-
-        embed.add_embed_field(name="Shortcode", value=shortcode)
-        embed.add_embed_field(name="Image", value=image_filename)
-
-        webhook.add_embed(embed)
         logger.debug(f'Editing Discord webhook id {webhook.id}')
         response = webhook.edit()
         logger.debug(f'Discord response: {response.status_code}')
@@ -225,6 +218,7 @@ class Discord:
 
         webhook = DiscordWebhook(url=self._url, username=self.name, rate_limit_retry=True)
         webhook.id = self.ids[shortcode]
+
         logger.debug(f'Deleting Discord webhook id {webhook.id}')
         response = webhook.delete()
         logger.debug(f'Discord response: {response.status_code} Id: {webhook.id}')
