@@ -2,7 +2,9 @@ import argparse
 import hashlib
 import json
 import logging
+import logging.handlers
 import os
+import shutil
 import time
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -14,15 +16,37 @@ from jsonschema import validate
 from watchdog.events import PatternMatchingEventHandler
 from watchdog.observers import Observer
 
-logging.basicConfig(
-    filename='debug.log',
-    filemode='a',
-    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
-    datefmt='%H:%M:%S',
-    level=logging.INFO
-)
-
 logger = logging.getLogger('Watchdog')
+
+
+def enable_logging(debug=False):
+    global logger
+
+    def _logger_configured():
+        for _handler in logger.handlers:
+            if isinstance(_handler, logging.handlers.RotatingFileHandler):
+                return True
+        return False
+
+    logging_format = logging.Formatter(
+        fmt='%(asctime)s.%(msecs)03d %(name)s %(levelname)s %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    if not _logger_configured():
+        if os.path.isfile('debug.log'):
+            shutil.move('debug.log', 'debug.log.1')
+
+        logger.setLevel(level=logging.INFO)
+        handler = logging.handlers.RotatingFileHandler('debug.log', maxBytes=5242880, backupCount=1)
+        handler.setFormatter(logging_format)
+        logger.addHandler(handler)
+
+    if debug:
+        logger.setLevel(level=logging.DEBUG)
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging_format)
+        logger.addHandler(handler)
 
 
 class Config:
@@ -598,12 +622,7 @@ def main():
 
     settings = Config(parsed_args.settings).settings
 
-    if settings.get('debug', False):
-        logger.setLevel(level=logging.DEBUG)
-        console_handler = logging.StreamHandler()
-        console_format = logging.Formatter('%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s')
-        console_handler.setFormatter(console_format)
-        logger.addHandler(console_handler)
+    enable_logging(debug=settings.get('debug', False))
 
     debug_space = '               '
     if __name__ != '__main__':
