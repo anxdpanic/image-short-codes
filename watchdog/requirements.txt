@@ -1,5 +1,6 @@
 argparse
 discord-webhook
+jsonschema
 paramiko
 shortuuid
 watchdog

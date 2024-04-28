@@ -1,20 +1,19 @@
+import argparse
 import hashlib
 import json
 import logging
 import os
 import sys
 import time
-
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-import argparse
 import paramiko
 import shortuuid
-
 from discord_webhook import DiscordWebhook, DiscordEmbed
-from watchdog.observers import Observer
+from jsonschema import validate
 from watchdog.events import PatternMatchingEventHandler
+from watchdog.observers import Observer
 
 logging.basicConfig(
     filename='debug.log',
@@ -25,8 +24,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger('Watchdog')
-
-REQUIRED_SETTINGS = ['host', 'port', 'username', 'password', 'local', 'remote', 'worker_url', 'worker_psk']
 
 
 def load_json(filename):
@@ -43,16 +40,96 @@ def save_json(filename, data):
 
 
 def load_settings(filename):
+    schema = {
+        "$schema": "http://json-schema.org/schema#",
+        "type": "object",
+        "properties": {
+            "sftp": {
+                "type": "object",
+                "properties": {
+                    "host": {
+                        "type": "string"
+                    },
+                    "port": {
+                        "type": "integer"
+                    },
+                    "username": {
+                        "type": "string"
+                    },
+                    "password": {
+                        "type": "string"
+                    },
+                    "local_path": {
+                        "type": "string"
+                    },
+                    "remote_path": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "host",
+                    "local_path",
+                    "password",
+                    "port",
+                    "remote_path",
+                    "username"
+                ]
+            },
+            "cloudflare": {
+                "type": "object",
+                "properties": {
+                    "worker_url": {
+                        "type": "string"
+                    },
+                    "worker_psk": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "worker_psk",
+                    "worker_url"
+                ]
+            },
+            "discord": {
+                "type": "object",
+                "properties": {
+                    "webhook": {
+                        "type": "string"
+                    },
+                    "author": {
+                        "type": "string"
+                    },
+                    "author_icon": {
+                        "type": "string"
+                    },
+                    "embed_title": {
+                        "type": "string"
+                    },
+                    "embed_color": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "webhook"
+                ]
+            },
+            "debug": {
+                "type": "boolean"
+            }
+        },
+        "required": [
+            "cloudflare",
+            "sftp"
+        ]
+    }
+
     if not os.path.isfile(filename):
         logger.error(f'Settings file does not exist. "{filename}"')
         return None
 
     payload = load_json(filename)
 
-    for setting in REQUIRED_SETTINGS:
-        if setting not in payload.keys():
-            logger.error(f'Required setting "{setting}" missing in {filename}')
-            return None
+    validate(instance=payload, schema=schema)
 
     return payload
 
@@ -62,9 +139,12 @@ def generate_shortcode():
 
 
 class Discord:
-    def __init__(self, webhook_url, webhook_name):
-        self._url = webhook_url
-        self._name = webhook_name
+    def __init__(self, webhook, author, author_icon, embed_title, embed_color):
+        self._url = webhook
+        self._name = author
+        self._icon = author_icon
+        self._title = embed_title
+        self._color = embed_color
         self._id_file = 'webhook_ids.json'
         self._webhook_ids = load_json(self._id_file)
 
@@ -73,14 +153,26 @@ class Discord:
         return self._name
 
     @property
+    def icon(self):
+        return self._icon
+
+    @property
+    def title(self):
+        return self._title
+
+    @property
+    def color(self):
+        return self._color
+
+    @property
     def ids(self):
         return self._webhook_ids
 
     def notify(self, shortcode, image_url, image_filename, description):
         webhook = DiscordWebhook(url=self._url, username=self.name, rate_limit_retry=True)
-        embed = DiscordEmbed(title='Shortcode Update', description=description, color='03b2f8')
+        embed = DiscordEmbed(title=self.title, description=description, color=self.color)
 
-        embed.set_author(name=self.name, icon_url=image_url)
+        embed.set_author(name=self.name, icon_url=self.icon)
 
         embed.set_image(url=image_url)
         embed.set_thumbnail(url=image_url)
@@ -97,21 +189,21 @@ class Discord:
         logger.debug(f'Discord webhook id: {webhook.id}')
 
         if webhook.id:
-            self._webhook_ids[shortcode] = webhook.id
-            save_json(self._id_file, self._webhook_ids)
+            self.ids[shortcode] = webhook.id
+            save_json(self._id_file, self.ids)
             logger.debug(f'Discord webhook ids updated with {webhook.id} for {shortcode}')
 
     def edit(self, shortcode, image_url, image_filename, description):
-        if shortcode not in self._webhook_ids.keys():
+        if shortcode not in self.ids.keys():
             logger.debug(f'Discord webhook id for {shortcode} not found')
             return
 
         webhook = DiscordWebhook(url=self._url, username=self.name, rate_limit_retry=True)
-        embed = DiscordEmbed(title='Shortcode Update', description=description, color='03b2f8')
+        embed = DiscordEmbed(title=self.title, description=description, color=self.color)
 
-        webhook.id = self._webhook_ids[shortcode]
+        webhook.id = self.ids[shortcode]
 
-        embed.set_author(name=self.name, icon_url=image_url)
+        embed.set_author(name=self.name, icon_url=self.icon)
 
         embed.set_image(url=image_url)
         embed.set_thumbnail(url=image_url)
@@ -386,23 +478,40 @@ class Watchdog:
 
 class FileMonitorHandler(PatternMatchingEventHandler):
     def __init__(self, *args, **kwargs):
-        self._connection_details = kwargs.pop('connection_details')
+        self._settings = kwargs.pop('settings')
         super(FileMonitorHandler, self).__init__(*args, **kwargs)
 
         self._sftp = SFTP(
-            host=self._connection_details['host'],
-            user=self._connection_details['username'],
-            password=self._connection_details['password'],
-            port=self._connection_details['port']
+            host=self._settings['sftp']['host'],
+            user=self._settings['sftp']['username'],
+            password=self._settings['sftp']['password'],
+            port=self._settings['sftp']['port']
         )
 
-        self._request = HTTPRequest(self._connection_details['worker_url'], self._connection_details['worker_psk'])
+        self._request = HTTPRequest(self._settings['cloudflare']['worker_url'],
+                                    self._settings['cloudflare']['worker_psk'])
+
         self._discord = None
-        if 'discord_webhook' in self._connection_details and 'webhook_name' in self._connection_details:
+        if 'discord' in self._settings and 'webhook' in self._settings['discord']:
             self._discord = Discord(
-                self._connection_details['discord_webhook'],
-                self._connection_details['webhook_name']
+                self._settings['discord']['webhook'],
+                self._settings['discord'].get('author', 'Shortcode Notifier'),
+                self._settings['discord'].get('author_icon', 'webhook-author.png'),
+                self._settings['discord'].get('embed_title', 'Shortcode Update'),
+                self._settings['discord'].get('embed_color', '03b2f8')
             )
+
+    def _get_shortcode(self, filename_and_path):
+        data = self._request.POST({'shortcode': Path(filename_and_path).name})
+        if not data:
+            data = {}
+
+        shortcode = data.get('shortcode')
+        if not shortcode:
+            logger.error(f'No shortcode for {filename_and_path}')
+            return None
+
+        return shortcode
 
     def on_any_event(self, event):
         if event.is_directory:
@@ -412,19 +521,16 @@ class FileMonitorHandler(PatternMatchingEventHandler):
         logger.debug(f'File event occurred:\n\tevent: {event}\n\thash: {event_hash}')
 
         if event.event_type == 'modified':
-            data = self._request.POST({'shortcode': Path(event.src_path).name})
-            if not data:
-                data = {}
-
+            shortcode = self._get_shortcode(event.src_path)
             filename = Path(event.src_path).name
-            shortcode = data.get('shortcode')
+
             if not shortcode:
                 logger.debug(f'No shortcode for {event.src_path}')
                 shortcode = generate_shortcode()
-                shortcode_url = '/'.join([self._connection_details['worker_url'], shortcode])
+                shortcode_url = '/'.join([self._settings['cloudflare']['worker_url'], shortcode])
 
                 self._request.POST({'shortcode': shortcode, 'image': filename})
-                self._sftp.put(event.src_path, self._connection_details['remote'])
+                self._sftp.put(event.src_path, self._settings['sftp']['remote'])
                 logger.info(f'{filename} is uploaded to {shortcode_url}')
 
                 if self._discord:
@@ -437,28 +543,21 @@ class FileMonitorHandler(PatternMatchingEventHandler):
                     )
 
             else:
-                shortcode_url = '/'.join([self._connection_details['worker_url'], shortcode])
+                shortcode_url = '/'.join([self._settings['cloudflare']['worker_url'], shortcode])
 
                 self._request.PUT({'shortcode': shortcode, 'image': Path(event.src_path).name})
-                self._sftp.put(event.src_path, self._connection_details['remote'])
+                self._sftp.put(event.src_path, self._settings['sftp']['remote_path'])
                 logger.info(f'{filename} is uploaded to {shortcode_url}')
 
         elif event.event_type == 'moved':
-            data = self._request.POST({'shortcode': Path(event.src_path).name})
-            if not data:
-                data = {}
-
-            shortcode = data.get('shortcode')
-            if not shortcode:
-                logger.error(f'No shortcode for {event.src_path}')
-                return
+            shortcode = self._get_shortcode(event.src_path)
 
             filename = Path(event.dest_path).name
             old_filename = Path(event.src_path).name
-            shortcode_url = '/'.join([self._connection_details['worker_url'], shortcode])
+            shortcode_url = '/'.join([self._settings['cloudflare']['worker_url'], shortcode])
 
             self._request.PUT({'shortcode': shortcode, 'image': filename})
-            self._sftp.rename(event.src_path, event.dest_path, self._connection_details['remote'])
+            self._sftp.rename(event.src_path, event.dest_path, self._settings['sftp']['remote_path'])
             logger.info(f'Moved {old_filename} to {filename}')
 
             if self._discord:
@@ -471,20 +570,11 @@ class FileMonitorHandler(PatternMatchingEventHandler):
                 )
 
         elif event.event_type == 'deleted':
-            data = self._request.POST({'shortcode': Path(event.src_path).name})
-            if not data:
-                data = {}
-
-            shortcode = data.get('shortcode')
-            if not shortcode:
-                logger.error(f'No shortcode for {event.src_path}')
-                return
-
-            filename = Path(event.src_path).name
+            shortcode = self._get_shortcode(event.src_path)
 
             self._request.DELETE(shortcode)
-            self._sftp.remove(event.src_path, self._connection_details['remote'])
-            logger.info(f'Deleted {filename}')
+            self._sftp.remove(event.src_path, self._settings['sftp']['remote_path'])
+            logger.info(f'Deleted {Path(event.src_path).name}')
 
             if self._discord:
                 self._discord.delete(shortcode)
@@ -515,38 +605,39 @@ def main():
         console_handler.setFormatter(console_format)
         logger.addHandler(console_handler)
 
+    debug_space = '               '
+    if __name__ != '__main__':
+        debug_space += '    '
+
     logger.info(
         f'Watchdog is running with:\n\t'
-        f'host: {settings["host"]}\n\t'
-        f'port: {settings["port"]}\n\t'
-        f'username: {settings["username"]}\n\t'
-        f'local directory: {settings["local"]}\n\t'
-        f'remote directory: {settings["remote"].rstrip("/")}\n\t'
-        f'worker url: {settings["worker_url"].rstrip("/")}\n\t'
-        f'webhook name: {settings["webhook_name"]}\n\t'
-        f'debug: {settings.get("debug", False)}'
+        f'SFTP Config:\n\t\t'
+        f'host:             {settings["sftp"]["host"]}\n\t\t'
+        f'port:             {settings["sftp"]["port"]}\n\t\t'
+        f'username:         {settings["sftp"]["username"]}\n\t\t'
+        f'local directory:  {settings["sftp"]["local_path"]}\n\t\t'
+        f'remote directory: {settings["sftp"]["remote_path"].rstrip("/")}\n\t'
+        f'Cloudflare Config:\n\t\t'
+        f'worker url:       {settings["cloudflare"]["worker_url"].rstrip("/")}\n\t'
+        f'Discord Config:\n\t\t'
+        f'author:           {settings["discord"]["author"]}\n\t\t'
+        f'author icon:      {settings["discord"]["author_icon"]}\n\t\t'
+        f'embed title:      {settings["discord"]["embed_title"]}\n\t\t'
+        f'embed color:      {settings["discord"]["embed_color"]}\n\t'
+        f'Debug: {debug_space}{settings.get("debug", False)}'
     )
 
-    connection_details = {
-        'host': settings['host'],
-        'port': int(settings['port']),
-        'username': settings['username'],
-        'password': settings['password'],
-        'local': settings['local'].replace('\\\\', '\\'),
-        'remote': settings['remote'].rstrip('/'),
-        'worker_url': settings['worker_url'].rstrip('/'),
-        'worker_psk': settings['worker_psk'],
-        'webhook_name': settings.get('webhook_name', ''),
-        'discord_webhook': settings.get('discord_webhook', '')
-    }
+    settings['sftp']['local_path'] = settings['sftp']['local_path'].replace('\\\\', '\\')
+    settings['sftp']['remote_path'] = settings['sftp']['remote_path'].rstrip('/')
+    settings["cloudflare"]['worker_url'] = settings["cloudflare"]['worker_url'].rstrip('/')
 
     watchdog = Watchdog(
-        connection_details['local'],
+        settings['sftp']['local_path'],
         FileMonitorHandler(
             patterns=['*.webp', '*.jpg', '*.jpeg', '*.png', '*.apng', '*.gif', '*.svg',
                       '*.bmp', '*.ico', '*.tiff', '*.pdf', '*.jpg2', '*.jxr'],
             ignore_directories=True,
-            connection_details=connection_details
+            settings=settings
         )
     )
     watchdog.run()

@@ -1,5 +1,8 @@
 import os
+
 import setuptools
+
+from watchdog.__init__ import *
 
 short_description = ('A watchdog for monitoring a directory for changes to image files, '
                      'and mirroring changes to a remote sftp server')
@@ -13,9 +16,9 @@ with open('requirements.txt') as f:
 
 setuptools.setup(
     name="watchdog-imgshort",
-    version="0.0.1",
-    author="anxdpanic",
-    author_email="anxdpanic@@users.noreply.github.com",
+    version=__version__,
+    author=__author__,
+    author_email=__email__,
     description=short_description,
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -28,9 +31,8 @@ setuptools.setup(
         "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Operating System :: OS Independent",
     ],
-    package_dir={"main": "watchdog"},
-    packages=['main'],
+    packages=setuptools.find_packages(),
     python_requires=">=3.6",
     install_requires=required,
-    entry_points={'console_scripts': ['watchdog-imgshort=main.main:main']},
+    entry_points={'console_scripts': ['watchdog-imgshort=watchdog.__main__:main']},
 )

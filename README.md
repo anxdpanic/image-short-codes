@@ -89,9 +89,9 @@ screen -dmS ImageWatchdog watchdog-imgshort -f config.json
 
 ## Windows
 # confirm working
-python watchdog\main.py -f config.json
+python watchdog\__main__.py -f config.json
 # run in the background
-pythonw watchdog\main.py -f config.json
+pythonw watchdog\__main__.py -f config.json
 ```
 
 ---
