@@ -48,8 +48,8 @@ class Discord(BaseNotifier):
 
         embed.set_timestamp()
 
-        embed.add_embed_field(name="Shortcode", value=shortcode)
-        embed.add_embed_field(name="Image", value=image_filename)
+        embed.add_embed_field(name='Shortcode', value=shortcode)
+        embed.add_embed_field(name='Image', value=image_filename)
         return embed
 
     def notify(self, shortcode, image_url, image_filename, description):
