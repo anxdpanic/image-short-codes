@@ -39,9 +39,13 @@ class Discord(BaseNotifier):
         return self._webhook_ids
 
     def _get_shortcode_embed(self, shortcode, image_url, image_filename, description):
+        icon_url = self.icon
+        if not icon_url:
+            icon_url = image_url
+
         embed = DiscordEmbed(title=self.title, description=description, color=self.color)
 
-        embed.set_author(name=self.name, icon_url=self.icon)
+        embed.set_author(name=self.name, icon_url=icon_url)
 
         embed.set_image(url=image_url)
         embed.set_thumbnail(url=image_url)
