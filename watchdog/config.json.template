@@ -14,7 +14,7 @@
   "discord": {
     "webhook": "https://discord.com/api/webhooks/",
     "author": "Shortcode Notifier",
-    "author_icon": "webhook-author.png",
+    "author_icon": "https://example.com/weblink-author.png",
     "embed_title": "Shortcode Update",
     "embed_color": "03b2f8"
   },
