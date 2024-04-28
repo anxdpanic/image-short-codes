@@ -7,7 +7,7 @@ import shutil
 from . import __logger__
 from .config import Config
 from .file_monitor import Watchdog
-from .handlers import FileMonitorHandler
+from .handlers import ImageHandler
 
 logger = logging.getLogger(__logger__)
 
@@ -75,12 +75,7 @@ def main():
 
     watchdog = Watchdog(
         settings['sftp']['local_path'],
-        FileMonitorHandler(
-            patterns=['*.webp', '*.jpg', '*.jpeg', '*.png', '*.apng', '*.gif', '*.svg',
-                      '*.bmp', '*.ico', '*.tiff', '*.pdf', '*.jpg2', '*.jxr'],
-            ignore_directories=True,
-            settings=settings
-        )
+        ImageHandler(settings=settings)
     )
     watchdog.run()
 

@@ -13,10 +13,14 @@ from .sftp_client import SFTP
 logger = logging.getLogger(__logger__)
 
 
-class FileMonitorHandler(PatternMatchingEventHandler):
-    def __init__(self, *args, **kwargs):
-        self._settings = kwargs.pop('settings')
-        super(FileMonitorHandler, self).__init__(*args, **kwargs)
+class ImageHandler(PatternMatchingEventHandler):
+    def __init__(self, settings):
+        self._settings = settings
+        super(ImageHandler, self).__init__(
+            patterns=['*.webp', '*.jpg', '*.jpeg', '*.png', '*.apng', '*.gif', '*.svg',
+                      '*.bmp', '*.ico', '*.tiff', '*.pdf', '*.jpg2', '*.jxr'],
+            ignore_directories=True
+        )
 
         self._sftp = SFTP(
             host=self._settings['sftp']['host'],
