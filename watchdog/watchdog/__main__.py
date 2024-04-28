@@ -3,7 +3,6 @@ import hashlib
 import json
 import logging
 import os
-import sys
 import time
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -24,19 +23,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger('Watchdog')
-
-
-def load_json(filename):
-    if not os.path.isfile(filename):
-        return {}
-
-    with open(filename, 'r') as _file:
-        return json.load(_file)
-
-
-def save_json(filename, data):
-    with open(filename, 'w') as _file:
-        json.dump(data, _file)
 
 
 class Config:
@@ -147,10 +133,6 @@ class Config:
         return payload
 
 
-def generate_shortcode():
-    return shortuuid.uuid()[:8]
-
-
 class Discord:
     def __init__(self, webhook, author, author_icon, embed_title, embed_color):
         self._url = webhook
@@ -159,7 +141,20 @@ class Discord:
         self._title = embed_title
         self._color = embed_color
         self._id_file = 'webhook_ids.json'
-        self._webhook_ids = load_json(self._id_file)
+        self._webhook_ids = self._load_json(self._id_file)
+
+    @staticmethod
+    def _load_json(filename):
+        if not os.path.isfile(filename):
+            return {}
+
+        with open(filename, 'r') as _file:
+            return json.load(_file)
+
+    @staticmethod
+    def _save_json(filename, data):
+        with open(filename, 'w') as _file:
+            json.dump(data, _file)
 
     @property
     def name(self):
@@ -207,7 +202,7 @@ class Discord:
 
         if webhook.id:
             self.ids[shortcode] = webhook.id
-            save_json(self._id_file, self.ids)
+            self._save_json(self._id_file, self.ids)
             logger.debug(f'Discord webhook ids updated with {webhook.id} for {shortcode}')
 
     def edit(self, shortcode, image_url, image_filename, description):
@@ -237,7 +232,7 @@ class Discord:
         logger.debug(f'Discord response: {response.status_code} Id: {webhook.id}')
         if 200 <= response.status_code < 300:
             del self.ids[shortcode]
-            save_json(self._id_file, self.ids)
+            self._save_json(self._id_file, self.ids)
             logger.debug(f'Discord webhook id removed {webhook.id} for {shortcode}')
 
 
@@ -508,6 +503,10 @@ class FileMonitorHandler(PatternMatchingEventHandler):
                 self._settings['discord'].get('embed_color', '03b2f8')
             )
 
+    @staticmethod
+    def _generate_shortcode():
+        return shortuuid.uuid()[:8]
+
     def _get_shortcode(self, filename_and_path):
         data = self._request.POST({'shortcode': Path(filename_and_path).name})
         if not data:
@@ -533,7 +532,7 @@ class FileMonitorHandler(PatternMatchingEventHandler):
 
             if not shortcode:
                 logger.debug(f'No shortcode for {event.src_path}')
-                shortcode = generate_shortcode()
+                shortcode = self._generate_shortcode()
                 shortcode_url = '/'.join([self._settings['cloudflare']['worker_url'], shortcode])
 
                 self._request.POST({'shortcode': shortcode, 'image': filename})
