@@ -75,7 +75,7 @@ class ImageHandler(PatternMatchingEventHandler):
                 shortcode_url = '/'.join([self._settings['cloudflare']['worker_url'], shortcode])
 
                 self._request.POST({'shortcode': shortcode, 'image': filename})
-                self._sftp.put(event.src_path, self._settings['sftp']['remote'])
+                self._sftp.put(event.src_path, self._settings['sftp']['remote_path'])
                 logger.info(f'{filename} is uploaded to {shortcode_url}')
 
                 if self._discord:
