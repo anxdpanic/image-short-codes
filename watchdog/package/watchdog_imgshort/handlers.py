@@ -32,15 +32,7 @@ class ImageHandler(PatternMatchingEventHandler):
         self._request = HTTPRequest(self._settings['cloudflare']['worker_url'],
                                     self._settings['cloudflare']['worker_psk'])
 
-        self._discord = None
-        if 'discord' in self._settings and 'webhook' in self._settings['discord']:
-            self._discord = Discord(
-                self._settings['discord']['webhook'],
-                self._settings['discord'].get('author', 'Shortcode Notifier'),
-                self._settings['discord'].get('author_icon', 'webhook-author.png'),
-                self._settings['discord'].get('embed_title', 'Shortcode Update'),
-                self._settings['discord'].get('embed_color', '03b2f8')
-            )
+        self._notifiers = []
 
     @staticmethod
     def _generate_shortcode():
@@ -57,6 +49,50 @@ class ImageHandler(PatternMatchingEventHandler):
             return None
 
         return shortcode
+
+    def _enabled_notifier(self, notifier_class):
+        for notifier in self._notifiers:
+            if isinstance(notifier, notifier_class):
+                return True
+        return False
+
+    def _enable_notifiers(self):
+        if 'discord' in self._settings and 'webhook' in self._settings['discord']:
+            if not self._enabled_notifier(Discord):
+                self._notifiers.append(
+                    Discord(
+                        self._settings['discord']['webhook'],
+                        self._settings['discord'].get('author', 'Shortcode Notifier'),
+                        self._settings['discord'].get('author_icon'),
+                        self._settings['discord'].get('embed_title', 'Shortcode Update'),
+                        self._settings['discord'].get('embed_color', '03b2f8')
+                    )
+                )
+
+    def _send_notifications(self, shortcode, shortcode_url, filename):
+        self._enable_notifiers()
+        for notifier in self._notifiers:
+            notifier.notify(
+                shortcode,
+                shortcode_url,
+                filename,
+                notifier.description(shortcode, shortcode_url)
+            )
+
+    def _edit_notifications(self, shortcode, shortcode_url, filename):
+        self._enable_notifiers()
+        for notifier in self._notifiers:
+            notifier.edit(
+                shortcode,
+                shortcode_url,
+                filename,
+                notifier.description(shortcode, shortcode_url)
+            )
+
+    def _delete_notifications(self, shortcode):
+        self._enable_notifiers()
+        for notifier in self._notifiers:
+            notifier.delete(shortcode)
 
     def on_any_event(self, event):
         if event.is_directory:
@@ -78,13 +114,8 @@ class ImageHandler(PatternMatchingEventHandler):
                 self._sftp.put(event.src_path, self._settings['sftp']['remote_path'])
                 logger.info(f'{filename} is uploaded to {shortcode_url}')
 
-                if self._discord:
-                    self._discord.notify(
-                        shortcode,
-                        shortcode_url,
-                        filename,
-                        self._discord.description(shortcode, shortcode_url)
-                    )
+                logger.info(f'Sending notifications')
+                self._send_notifications(shortcode, shortcode_url, filename)
 
             else:
                 shortcode_url = '/'.join([self._settings['cloudflare']['worker_url'], shortcode])
@@ -104,13 +135,8 @@ class ImageHandler(PatternMatchingEventHandler):
             self._sftp.rename(event.src_path, event.dest_path, self._settings['sftp']['remote_path'])
             logger.info(f'Moved {old_filename} to {filename}')
 
-            if self._discord:
-                self._discord.edit(
-                    shortcode,
-                    shortcode_url,
-                    filename,
-                    self._discord.description(shortcode, shortcode_url)
-                )
+            logger.info(f'Editing notifications')
+            self._edit_notifications(shortcode, shortcode_url, filename)
 
         elif event.event_type == 'deleted':
             shortcode = self._get_shortcode(event.src_path)
@@ -119,8 +145,8 @@ class ImageHandler(PatternMatchingEventHandler):
             self._sftp.remove(event.src_path, self._settings['sftp']['remote_path'])
             logger.info(f'Deleted {Path(event.src_path).name}')
 
-            if self._discord:
-                self._discord.delete(shortcode)
+            logger.info(f'Deleting notifications')
+            self._delete_notifications(shortcode)
 
         logger.debug(f'Response to file event completed.\n\thash: {event_hash}')
 
