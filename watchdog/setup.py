@@ -3,7 +3,7 @@ from pathlib import PurePath
 
 import setuptools
 
-from package.__init__ import *
+from watchdog_imgshort.__init__ import *
 
 __short_description__ = ('A watchdog that monitors a directory for changes to image files, mirrors changes to a '
                          'remote sftp server, when necessary generates a shortcode url using a Cloudflare worker, '
@@ -35,5 +35,5 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     python_requires='>=3.6',
     install_requires=__requirements__,
-    entry_points={'console_scripts': ['watchdog-imgshort=package.__main__:main']},
+    entry_points={'console_scripts': ['watchdog-imgshort=watchdog_imgshort.__main__:main']},
 )

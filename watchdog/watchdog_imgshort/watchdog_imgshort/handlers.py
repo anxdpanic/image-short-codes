@@ -126,27 +126,39 @@ class ImageHandler(PatternMatchingEventHandler):
 
         elif event.event_type == 'moved':
             shortcode = self._get_shortcode(event.src_path)
-
             filename = Path(event.dest_path).name
             old_filename = Path(event.src_path).name
-            shortcode_url = '/'.join([self._settings['cloudflare']['worker_url'], shortcode])
 
-            self._request.PUT({'shortcode': shortcode, 'image': filename})
-            self._sftp.rename(event.src_path, event.dest_path, self._settings['sftp']['remote_path'])
-            logger.info(f'Moved {old_filename} to {filename}')
+            if not shortcode:
+                logger.debug(f'No shortcode for {event.src_path}')
+                shortcode = self._generate_shortcode()
+                shortcode_url = '/'.join([self._settings['cloudflare']['worker_url'], shortcode])
 
-            logger.info(f'Editing notifications')
-            self._edit_notifications(shortcode, shortcode_url, filename)
+                self._request.POST({'shortcode': shortcode, 'image': filename})
+                self._sftp.put(event.dest_path, self._settings['sftp']['remote_path'])
+                logger.info(f'{filename} is uploaded to {shortcode_url}')
+
+                logger.info(f'Sending notifications')
+                self._send_notifications(shortcode, shortcode_url, filename)
+            else:
+                shortcode_url = '/'.join([self._settings['cloudflare']['worker_url'], shortcode])
+
+                self._request.PUT({'shortcode': shortcode, 'image': filename})
+                self._sftp.rename(event.src_path, event.dest_path, self._settings['sftp']['remote_path'])
+                logger.info(f'Moved {old_filename} to {filename}')
+
+                logger.info(f'Editing notifications')
+                self._edit_notifications(shortcode, shortcode_url, filename)
 
         elif event.event_type == 'deleted':
             shortcode = self._get_shortcode(event.src_path)
+            if shortcode:
+                self._request.DELETE(shortcode)
+                self._sftp.remove(event.src_path, self._settings['sftp']['remote_path'])
+                logger.info(f'Deleted {Path(event.src_path).name}')
 
-            self._request.DELETE(shortcode)
-            self._sftp.remove(event.src_path, self._settings['sftp']['remote_path'])
-            logger.info(f'Deleted {Path(event.src_path).name}')
-
-            logger.info(f'Deleting notifications')
-            self._delete_notifications(shortcode)
+                logger.info(f'Deleting notifications')
+                self._delete_notifications(shortcode)
 
         logger.debug(f'Response to file event completed.\n\thash: {event_hash}')
 

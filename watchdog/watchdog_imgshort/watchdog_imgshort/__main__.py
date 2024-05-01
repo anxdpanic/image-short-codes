@@ -1,8 +1,8 @@
 import argparse
 import logging
 import logging.handlers
-import os
 import shutil
+from pathlib import Path
 
 from . import __logger__
 from .config import Config
@@ -13,6 +13,7 @@ logger = logging.getLogger(__logger__)
 
 
 def enable_logging(debug=False):
+    log_file = Path(Path().cwd(), 'debug.log')
     global logger
 
     def _logger_configured():
@@ -27,11 +28,11 @@ def enable_logging(debug=False):
     )
 
     if not _logger_configured():
-        if os.path.isfile('debug.log'):
-            shutil.move('debug.log', 'debug.log.1')
+        if log_file.is_file():
+            shutil.move(log_file, f'{log_file}.1')
 
         logger.setLevel(level=logging.INFO)
-        handler = logging.handlers.RotatingFileHandler('debug.log', maxBytes=5242880, backupCount=1)
+        handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=5242880, backupCount=1)
         handler.setFormatter(logging_format)
         logger.addHandler(handler)
 

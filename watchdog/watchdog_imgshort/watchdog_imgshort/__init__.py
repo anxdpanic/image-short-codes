@@ -1,4 +1,4 @@
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 __name__ = 'watchdog-imgshort'
 __author__ = 'anxdpanic'
 __email__ = 'anxdpanic@@users.noreply.github.com'
